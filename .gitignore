@@ -1,0 +1,39 @@
+# Captured traffic — never commit real network data
+*.pcap
+*.pcapng
+*.cap
+captures/
+
+# Secrets / environment
+.env
+.env.*
+*.key
+*.pem
+secrets*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Vivado / FPGA build artifacts
+*.bit
+*.bin
+*.ltx
+*.jou
+*.str
+*.log
+.Xil/
+.cache/
+*.cache/
+*.runs/
+*.hw/
+*.sim/
+*.ip_user_files/
+vivado*.backup.*
+
+# OS
+.DS_Store
