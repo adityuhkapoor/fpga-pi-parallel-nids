@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Capture packets, extract a fixed 20-byte header, print it.
+"""Capture packets, extract a fixed 20-byte header, print it (and optionally send over SPI).
 
-Stage 1: capture + extraction + packing only. SPI transmission to the FPGA is
-stubbed in spi_send().
+Stage 1: capture + extraction + packing. With --spi, each header is also clocked
+out to the FPGA over SPI (spidev0.0, see PROTOCOL.md); without it, capture only.
 
     sudo python3 packet_capture.py --iface eth0 --timeout 6
+    sudo python3 packet_capture.py --iface eth0 --timeout 6 --spi
 """
 import argparse
 import socket
@@ -12,6 +13,8 @@ import struct
 import sys
 
 from scapy.all import sniff, IP, TCP, UDP
+
+from spi_link import SpiLink, FRAME_LEN
 
 # Fixed 20-byte header, big-endian, word-aligned (five 32-bit words):
 #   word0: src IPv4
@@ -21,15 +24,9 @@ from scapy.all import sniff, IP, TCP, UDP
 #   word4: reserved
 # IPv4 addresses are packed as raw network bytes (inet_aton); the rest via _TAIL.
 _TAIL = struct.Struct(">HHBBHI")  # src_port, dst_port, proto, flags, size, reserved
-HEADER_LEN = 20
+HEADER_LEN = FRAME_LEN
 
 _PROTO_NAMES = {1: "ICMP", 6: "TCP", 17: "UDP"}
-
-
-def spi_send(header: bytes) -> None:
-    """Stub: will clock the 20 bytes out to the FPGA over spidev (bus 0, CE0)."""
-    assert len(header) == HEADER_LEN, f"header must be {HEADER_LEN}B, got {len(header)}"
-    # TODO(spi): spi.xfer2(list(header))
 
 
 def extract_header(pkt) -> bytes | None:
@@ -68,7 +65,7 @@ def format_row(pkt, header: bytes) -> str:
     )
 
 
-def make_handler():
+def make_handler(link=None):
     count = 0
 
     def handle(pkt):
@@ -77,8 +74,16 @@ def make_handler():
         if header is None:
             return
         count += 1
-        print(f"{count:>4}  {format_row(pkt, header)}", flush=True)
-        spi_send(header)
+        row = format_row(pkt, header)
+        if link is not None:
+            rx = link.send_frame(header)
+            if rx == header:
+                row += "  spi:echo"
+            elif any(rx):
+                row += f"  spi:rx={rx.hex()}"
+            else:
+                row += "  spi:sent"
+        print(f"{count:>4}  {row}", flush=True)
 
     return handle
 
@@ -90,24 +95,29 @@ def main() -> None:
     ap.add_argument("--count", type=int, default=0, help="stop after N packets (0 = unlimited)")
     ap.add_argument("--filter", dest="bpf", default=None,
                     help="BPF capture filter, e.g. 'ip and not port 22' to exclude SSH control traffic")
+    ap.add_argument("--spi", action="store_true", help="also clock each header out over SPI (spidev0.0)")
     args = ap.parse_args()
 
+    link = SpiLink() if args.spi else None
     print(
         f"# sniffing {args.iface} "
         f"(timeout={args.timeout or 'inf'}s, count={args.count or 'inf'}, "
-        f"filter={args.bpf or 'none'}); "
-        f"{HEADER_LEN}B headers; SPI send stubbed",
+        f"filter={args.bpf or 'none'}, spi={'on' if link else 'off'}); {HEADER_LEN}B headers",
         file=sys.stderr,
         flush=True,
     )
-    sniff(
-        iface=args.iface,
-        prn=make_handler(),
-        filter=args.bpf,
-        timeout=(args.timeout or None),
-        count=args.count,
-        store=False,
-    )
+    try:
+        sniff(
+            iface=args.iface,
+            prn=make_handler(link),
+            filter=args.bpf,
+            timeout=(args.timeout or None),
+            count=args.count,
+            store=False,
+        )
+    finally:
+        if link is not None:
+            link.close()
 
 
 if __name__ == "__main__":
