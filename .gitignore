@@ -38,5 +38,10 @@ env/
 vivado*.backup.*
 fpga/build/
 
+# Vivado simulation artifacts
+xsim.dir/
+*.pb
+*.wdb
+
 # OS
 .DS_Store
