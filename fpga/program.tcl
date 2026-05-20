@@ -1,11 +1,16 @@
-# Program the Basys 3 over JTAG with the smoke-test bitstream.
-#   vivado -mode batch -source program.tcl
+# Program the Basys 3 over JTAG.
+#   vivado -mode batch -source program.tcl [-tclargs <path-to.bit>]
+# Defaults to the NIDS bitstream; pass a path to program a different one.
 # Requires the board connected by USB and cable drivers installed.
 
 set origin [file dirname [file normalize [info script]]]
-set bit    $origin/build/smoke/smoke.runs/impl_1/top.bit
+if {$argc > 0} {
+    set bit [lindex $argv 0]
+} else {
+    set bit $origin/build/nids/nids.runs/impl_1/nids_top.bit
+}
 if {![file exists $bit]} {
-    error "bitstream not found at $bit -- run build_smoke.tcl first"
+    error "bitstream not found at $bit -- run build.tcl first"
 }
 
 open_hw_manager
