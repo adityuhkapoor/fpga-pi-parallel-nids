@@ -20,6 +20,7 @@ env/
 *.egg-info/
 
 # Vivado / FPGA build artifacts
+*.xpr
 *.bit
 *.bin
 *.ltx
@@ -30,10 +31,17 @@ env/
 .cache/
 *.cache/
 *.runs/
+*.gen/
 *.hw/
 *.sim/
 *.ip_user_files/
 vivado*.backup.*
+fpga/build/
+
+# Vivado simulation artifacts
+xsim.dir/
+*.pb
+*.wdb
 
 # OS
 .DS_Store
