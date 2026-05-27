@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""FPGA-vs-CPU benchmark for the v1 (bloom) classifier.
+"""FPGA-vs-CPU benchmark for the packet classifier.
 
 Times the CPU reference classifier (`classifier.py`) over a synthetic header workload
 and contrasts it with the FPGA classifier core's *deterministic* latency. The point
 isn't just "which is faster" — it's jitter: the CPU's per-packet latency varies (OS
 scheduling, cache, GC), while the FPGA core is the same cycle count every time.
+
+The FPGA latency is the real v1.1 frame->verdict pipeline depth (8 cycles, see
+--fpga-cycles), not a placeholder. The CPU side times the single-packet classify path
+(bloom; the stateful stages add negligible per-call work), which is the fair
+compute-vs-compute comparison.
 
     python3 benchmark.py --count 100000 --hit-fraction 0.1
 
@@ -19,7 +24,7 @@ import struct
 import time
 
 from bloom import BloomFilter, TEST_C2_SET, ip_to_int
-from classifier import classify_header
+from classifier import Classifier
 
 _TAIL = struct.Struct(">HHBBHI")  # sport,dport,proto,flags,size,reserved
 
@@ -83,12 +88,19 @@ def fpga_core_latency_ns(cycles: int, clk_hz: int) -> float:
 
 
 def run_cpu(headers, bloom: BloomFilter):
-    """Classify every header, returning per-call latencies in ns."""
+    """Classify every header with ONE persistent classifier, returning per-call ns.
+
+    Reuses a single Classifier (one state table) across the workload — the realistic
+    stateful path, and the fair analogue to the FPGA reusing its BRAM. (The
+    classify_header compat wrapper allocates a fresh table per call, which would time
+    allocation, not classification.)
+    """
+    clf = Classifier(bloom)
     samples = []
     perf = time.perf_counter_ns
-    for i, h in enumerate(headers, start=1):
+    for i, h in enumerate(headers):
         t0 = perf()
-        classify_header(h, bloom, seq=i)
+        clf.classify(h, seq=(i & 0xFF) + 1, frame_count=i)
         samples.append(perf() - t0)
     return samples
 
@@ -98,8 +110,10 @@ def main() -> None:
     ap.add_argument("--count", type=int, default=100_000, help="headers to classify")
     ap.add_argument("--hit-fraction", type=float, default=0.1, help="fraction that hit a C2 IP")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--fpga-cycles", type=int, default=4,
-                    help="FPGA classifier-core pipeline depth (parse+bloom+encode); confirm from the HDL")
+    ap.add_argument("--fpga-cycles", type=int, default=8,
+                    help="FPGA frame->verdict pipeline depth @100MHz (derived from the FSMs): "
+                         "header_parser 1 + (bloom||scan_rate) 4 + classifiers combine 2 + "
+                         "verdict_encoder 1 = 8 cycles")
     ap.add_argument("--clk-mhz", type=float, default=100.0, help="FPGA clock (Basys 3 = 100 MHz)")
     args = ap.parse_args()
 
@@ -114,7 +128,7 @@ def main() -> None:
     fpga_ns = fpga_core_latency_ns(args.fpga_cycles, int(args.clk_mhz * 1e6))
     throughput = args.count / wall
 
-    print(f"# v1 bloom classifier — CPU vs FPGA core ({args.count} headers, "
+    print(f"# packet classifier (v1.1) — CPU vs FPGA core ({args.count} headers, "
           f"{args.hit_fraction:.0%} C2-hit)")
     print(f"CPU  ({_cpu_name()}):")
     print(f"  throughput   {throughput:,.0f} headers/s")
