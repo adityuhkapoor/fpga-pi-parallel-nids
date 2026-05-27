@@ -15,6 +15,7 @@ import sys
 from scapy.all import sniff, IP, TCP, UDP
 
 from spi_link import SpiLink, FRAME_LEN
+from verdict import decode_verdict
 
 # Fixed 20-byte header, big-endian, word-aligned (five 32-bit words):
 #   word0: src IPv4
@@ -76,13 +77,10 @@ def make_handler(link=None):
         count += 1
         row = format_row(pkt, header)
         if link is not None:
-            rx = link.send_frame(header)
-            if rx == header:
-                row += "  spi:echo"
-            elif any(rx):
-                row += f"  spi:rx={rx.hex()}"
-            else:
-                row += "  spi:sent"
+            # Full-duplex: the 20 bytes read back carry the verdict for the PREVIOUS
+            # frame (one-frame pipeline lag, PROTOCOL.md); seq in the summary says which.
+            verdict = decode_verdict(link.send_frame(header))
+            row += f"  verdict<-{verdict.describe()}"
         print(f"{count:>4}  {row}", flush=True)
 
     return handle
