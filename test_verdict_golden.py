@@ -1,4 +1,4 @@
-"""Pi-side check against the shared Tier-2 golden vectors (internal VERDICT_GOLDEN.md).
+"""Pi-side check against the shared Tier-2 golden vectors (VERDICT_GOLDEN.md).
 
 The CPU reference classifier must produce exactly the verdicts in that doc; the FPGA
 pipeline TB asserts the same. Keep this table byte-for-byte in sync with VERDICT_GOLDEN.md.

@@ -1,6 +1,6 @@
 """Pi-side check against the shared Tier-1 verdict format vectors.
 
-Mirrors internal-repo VERDICT_VECTORS.md exactly. The FPGA encoder testbench asserts
+Mirrors VERDICT_VECTORS.md exactly. The FPGA encoder testbench asserts
 it *emits* these frames; here the Pi decoder asserts it *reads* them back to the same
 fields. If both pass, the two sides agree on the byte layout — no hardware needed.
 
