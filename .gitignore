@@ -42,7 +42,8 @@ fpga/build/
 xsim.dir/
 *.pb
 *.wdb
-fpga/sim/bloom_init.mem   # derived copy; run_sim.tcl copies it from fpga/src
+# derived copy; run_sim.tcl copies it from fpga/src
+fpga/sim/bloom_init.mem
 
 # OS
 .DS_Store

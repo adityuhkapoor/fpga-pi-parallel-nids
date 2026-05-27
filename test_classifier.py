@@ -48,3 +48,34 @@ def test_seq_is_passed_through():
     bf = BloomFilter.from_ips(TEST_C2_SET)
     v = decode_verdict(classify_header(make_header("192.0.2.1", "192.0.2.2"), bf, seq=255))
     assert v.seq == 255
+
+
+# ---------------------------------------------------------------------------
+# v1.1 stateful Classifier tests
+# ---------------------------------------------------------------------------
+from classifier import Classifier  # noqa: E402 — imported after guard above
+
+C2 = [0xC6336401, 0xCB007105, 0xC0000263]  # RFC5737 test C2 set (integer form)
+
+
+def _bloom():
+    b = BloomFilter()
+    for ip in C2:
+        b.add(ip)   # BloomFilter.add(int) — confirmed real API
+    return b
+
+
+def test_bloom_only_verdict_is_byte_identical_to_v1():
+    bloom = _bloom()
+    header = bytes.fromhex("c0000201c6336401303901bb0602003c00000000")
+    legacy = classify_header(header, bloom, seq=2)
+    v = decode_verdict(legacy)
+    assert v.bloom_hit and not v.port_scan and not v.rate_anomaly
+    assert v.severity == 3 and v.escalate and v.seq == 2
+
+
+def test_classifier_object_matches_wrapper_for_single_packet():
+    bloom = _bloom()
+    header = bytes.fromhex("c0000201c6336401303901bb0602003c00000000")
+    obj = Classifier(bloom).classify(header, seq=2, frame_count=1)
+    assert obj == classify_header(header, bloom, seq=2)
