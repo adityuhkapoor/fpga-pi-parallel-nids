@@ -6,7 +6,10 @@ set proj_dir $origin/build/nids
 
 create_project -force nids $proj_dir -part xc7a35tcpg236-1
 
-add_files -norecurse [list $origin/src/nids_top.v $origin/src/spi_slave_rx.v]
+add_files -norecurse [list $origin/src/nids_top.v $origin/src/spi_slave_rx.v \
+                           $origin/src/header_parser.v $origin/src/bloom_filter.v \
+                           $origin/src/classifiers.v $origin/src/verdict_encoder.v]
+add_files -norecurse $origin/src/bloom_init.mem
 add_files -fileset constrs_1 -norecurse $origin/constraints/nids.xdc
 set_property top nids_top [current_fileset]
 update_compile_order -fileset sources_1
