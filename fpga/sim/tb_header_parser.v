@@ -35,9 +35,11 @@ module tb_header_parser;
         input [15:0]             e_size
     );
         begin
-            @(posedge clk); frame = f; frame_valid = 1'b1;
-            @(posedge clk); frame_valid = 1'b0;
-            @(posedge clk);
+            // Stimulus 1 ns after each edge so frame_valid is sampled cleanly for exactly
+            // one edge (no delta race / double-latch); matches tb_bloom_filter's pattern.
+            @(posedge clk); #1; frame = f; frame_valid = 1'b1;
+            @(posedge clk); #1; frame_valid = 1'b0;
+            @(posedge clk); #1;
             if (src_ip   !== e_src)   begin $display("FAIL v%0d src_ip %08h != %08h", vnum, src_ip,   e_src);   errors=errors+1; end
             if (dst_ip   !== e_dst)   begin $display("FAIL v%0d dst_ip %08h != %08h", vnum, dst_ip,   e_dst);   errors=errors+1; end
             if (src_port !== e_sport) begin $display("FAIL v%0d sport %04h != %04h",  vnum, src_port, e_sport); errors=errors+1; end
