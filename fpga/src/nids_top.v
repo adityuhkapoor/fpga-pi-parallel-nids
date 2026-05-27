@@ -23,12 +23,15 @@ module nids_top (
     // Frame counter: incremented once per received frame. seq for frame K is K & 0xFF,
     // captured when the frame arrives and held while the pipeline produces its verdict.
     reg [15:0] frame_count;
+    reg [15:0] frame_idx;   // 0-based index of the current frame (pre-increment value)
     reg [7:0]  seq_reg;
     always @(posedge clk) begin
         if (rst) begin
             frame_count <= 16'd0;
+            frame_idx   <= 16'd0;
             seq_reg     <= 8'd0;
         end else if (rx_frame_valid) begin
+            frame_idx   <= frame_count;               // index of THIS frame, drives the window epoch
             frame_count <= frame_count + 16'd1;
             seq_reg     <= frame_count[7:0] + 8'd1;   // K & 0xFF for this frame
         end
@@ -53,7 +56,8 @@ module nids_top (
     classifiers u_cls (
         .clk(clk), .rst(rst),
         .src_ip(src_ip), .dst_ip(dst_ip), .src_port(src_port), .dst_port(dst_port),
-        .proto(proto), .tcp_flags(tcp_flags), .pkt_size(pkt_size), .fields_valid(fields_valid),
+        .proto(proto), .tcp_flags(tcp_flags), .pkt_size(pkt_size),
+        .frame_count(frame_idx), .fields_valid(fields_valid),
         .hit_mask(hit_mask), .severity(severity), .escalate(escalate), .classify_valid(classify_valid)
     );
 
