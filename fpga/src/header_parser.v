@@ -1,9 +1,9 @@
 `timescale 1ns/1ps
-// Splits the 20-byte header frame into fields. Layout is the fixed big-endian
-// contract (PROTOCOL.md); frame[159:152] is byte 0. Latches on frame_valid and
-// pulses fields_valid the same cycle.
+// Splits the header frame into fields. Layout is the fixed big-endian contract
+// (PROTOCOL.md); byte 0 is the top byte (frame[FRAME_BITS-1 -: 8]) so the slices are
+// width-agnostic. Latches on frame_valid and pulses fields_valid the same cycle.
 module header_parser #(
-    parameter FRAME_BYTES = 20
+    parameter FRAME_BYTES = 32
 )(
     input  wire                     clk,
     input  wire                     rst,
@@ -18,19 +18,20 @@ module header_parser #(
     output reg  [15:0]              pkt_size,
     output reg                      fields_valid
 );
+    localparam FRAME_BITS = FRAME_BYTES*8;
     always @(posedge clk) begin
         fields_valid <= 1'b0;
         if (rst) begin
             fields_valid <= 1'b0;
         end else if (frame_valid) begin
-            src_ip       <= frame[159:128];   // bytes 0-3
-            dst_ip       <= frame[127:96];    // bytes 4-7
-            src_port     <= frame[95:80];     // bytes 8-9
-            dst_port     <= frame[79:64];     // bytes 10-11
-            proto        <= frame[63:56];     // byte 12
-            tcp_flags    <= frame[55:48];     // byte 13
-            pkt_size     <= frame[47:32];     // bytes 14-15
-            fields_valid <= 1'b1;             // bytes 16-19 (reserved) dropped
+            src_ip       <= frame[FRAME_BITS-1   -: 32];   // bytes 0-3
+            dst_ip       <= frame[FRAME_BITS-33  -: 32];   // bytes 4-7
+            src_port     <= frame[FRAME_BITS-65  -: 16];   // bytes 8-9
+            dst_port     <= frame[FRAME_BITS-81  -: 16];   // bytes 10-11
+            proto        <= frame[FRAME_BITS-97  -:  8];   // byte 12
+            tcp_flags    <= frame[FRAME_BITS-105 -:  8];   // byte 13
+            pkt_size     <= frame[FRAME_BITS-113 -: 16];   // bytes 14-15
+            fields_valid <= 1'b1;                          // bytes 16+ (reserved) dropped
         end
     end
 endmodule

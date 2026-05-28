@@ -3,7 +3,7 @@
 The timing/printing in benchmark.__main__ is a measurement script (not unit-tested);
 the deterministic parts that decide what gets measured are tested here.
 """
-from benchmark import make_workload, latency_stats, fpga_core_latency_ns
+from benchmark import make_workload, latency_stats, fpga_core_latency_ns, link_frame_us
 from bloom import BloomFilter, TEST_C2_SET
 from classifier import classify_header
 from verdict import decode_verdict
@@ -33,8 +33,8 @@ def test_workload_is_deterministic_for_a_seed():
     assert make_workload(50, seed=7) != make_workload(50, seed=8)
 
 
-def test_workload_headers_are_20_bytes():
-    assert all(len(h) == 20 for h in make_workload(30))
+def test_workload_headers_are_32_bytes():
+    assert all(len(h) == 32 for h in make_workload(30))
 
 
 def test_latency_stats_on_known_samples():
@@ -50,3 +50,16 @@ def test_latency_stats_on_known_samples():
 def test_fpga_core_latency_is_deterministic_cycles_times_period():
     # 5 pipeline cycles at 100 MHz = 50 ns.
     assert fpga_core_latency_ns(cycles=5, clk_hz=100_000_000) == 50.0
+
+
+def test_link_frame_time():
+    # 20B @ 1 MHz = 160 bits / 1e6 = 160 us (the v1 link cost).
+    assert abs(link_frame_us(20, 1_000_000) - 160.0) < 1e-6
+    # 32B @ 30 MHz = 256 bits / 30e6 ~= 8.533 us.
+    assert abs(link_frame_us(32, 30_000_000) - 256 / 30) < 1e-3
+
+
+def test_link_frame_time_scales_with_clock_and_size():
+    # Halving the clock doubles the per-frame time; doubling bytes doubles it.
+    assert link_frame_us(20, 2_000_000) == link_frame_us(20, 1_000_000) / 2
+    assert link_frame_us(40, 1_000_000) == link_frame_us(20, 1_000_000) * 2

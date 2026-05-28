@@ -5,7 +5,7 @@
 // (neither IP on the C2 list); frame B's src (CB007105) is a C2 IP -> bloom hit. This
 // confirms a hit propagates through the full pipeline; tb_verdict_golden covers the rest.
 module tb_nids_top;
-    localparam FRAME_BYTES = 20;
+    localparam FRAME_BYTES = 32;
     localparam FRAME_BITS  = FRAME_BYTES*8;
     localparam HALF        = 250;   // 2 MHz SCLK
 
@@ -54,17 +54,17 @@ module tb_nids_top;
                        input [7:0] e_magic, input [7:0] e_mask, input [7:0] e_sev,
                        input [7:0] e_flags, input [7:0] e_seq);
         begin
-            if (v[159:152] !== e_magic) begin $display("FAIL t%0d magic %02h != %02h", n, v[159:152], e_magic); errors=errors+1; end
-            if (v[151:144] !== e_mask)  begin $display("FAIL t%0d mask %02h != %02h",  n, v[151:144], e_mask);  errors=errors+1; end
-            if (v[143:136] !== e_sev)   begin $display("FAIL t%0d sev %02h != %02h",   n, v[143:136], e_sev);   errors=errors+1; end
-            if (v[135:128] !== e_flags) begin $display("FAIL t%0d flags %02h != %02h", n, v[135:128], e_flags); errors=errors+1; end
-            if (v[127:120] !== e_seq)   begin $display("FAIL t%0d seq %02h != %02h",   n, v[127:120], e_seq);   errors=errors+1; end
-            if (v[119:0]   !== 120'd0)  begin $display("FAIL t%0d reserved nonzero", n); errors=errors+1; end
+            if (v[FRAME_BITS-1  -: 8] !== e_magic) begin $display("FAIL t%0d magic %02h != %02h", n, v[FRAME_BITS-1  -: 8], e_magic); errors=errors+1; end
+            if (v[FRAME_BITS-9  -: 8] !== e_mask)  begin $display("FAIL t%0d mask %02h != %02h",  n, v[FRAME_BITS-9  -: 8], e_mask);  errors=errors+1; end
+            if (v[FRAME_BITS-17 -: 8] !== e_sev)   begin $display("FAIL t%0d sev %02h != %02h",   n, v[FRAME_BITS-17 -: 8], e_sev);   errors=errors+1; end
+            if (v[FRAME_BITS-25 -: 8] !== e_flags) begin $display("FAIL t%0d flags %02h != %02h", n, v[FRAME_BITS-25 -: 8], e_flags); errors=errors+1; end
+            if (v[FRAME_BITS-33 -: 8] !== e_seq)   begin $display("FAIL t%0d seq %02h != %02h",   n, v[FRAME_BITS-33 -: 8], e_seq);   errors=errors+1; end
+            if (v[FRAME_BITS-41:0]    !== {(FRAME_BITS-40){1'b0}}) begin $display("FAIL t%0d reserved nonzero", n); errors=errors+1; end
         end
     endtask
 
-    localparam [FRAME_BITS-1:0] A = 160'hC000020A_C6336414_100001BB_061805DC_00000000;
-    localparam [FRAME_BITS-1:0] B = 160'hCB007105_C00002C8_0016C738_11000040_00000000;
+    localparam [FRAME_BITS-1:0] A = 256'hC000020A_C6336414_100001BB_061805DC_00000000000000000000000000000000;
+    localparam [FRAME_BITS-1:0] B = 256'hCB007105_C00002C8_0016C738_11000040_00000000000000000000000000000000;
 
     reg [FRAME_BITS-1:0] r1, r2, r3;
 
@@ -77,7 +77,7 @@ module tb_nids_top;
         send_frame(A, r3);        // transfer 3: verdict for frame 2 (seq=2)
 
         // transfer 1: "no verdict yet" -> magic must not be 0xA5 (it's 0x00, all reserved 0)
-        if (r1[159:152] === 8'hA5) begin $display("FAIL t1: magic 0xA5 but no prior frame"); errors=errors+1; end
+        if (r1[FRAME_BITS-1 -: 8] === 8'hA5) begin $display("FAIL t1: magic 0xA5 but no prior frame"); errors=errors+1; end
         if (r1 !== {FRAME_BITS{1'b0}}) begin $display("FAIL t1: expected all-zero, got %h", r1); errors=errors+1; end
 
         check_verdict(2, r2, 8'hA5, 8'h00, 8'h00, 8'h00, 8'h01);   // frame 1 (A) clean

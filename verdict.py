@@ -1,11 +1,11 @@
-"""Decode the 20-byte v2 verdict frame the FPGA returns on MISO (PROTOCOL.md §Response).
+"""Decode the 32-byte v2 verdict frame the FPGA returns on MISO (PROTOCOL.md §Response).
 
 Pure stdlib (no spidev) so it can be unit-tested off the Pi.
 """
 from dataclasses import dataclass
 
 VERDICT_MAGIC = 0xA5
-VERDICT_LEN = 20
+VERDICT_LEN = 32             # v2 frame width (v1 was 20)
 
 # Stage-hit mask bits (byte 1), in wire-bit order.
 _STAGE_BITS = [("bloom", 0), ("port_scan", 1), ("rate_anomaly", 2)]
@@ -52,18 +52,19 @@ class Verdict:
 def encode_verdict(*, bloom_hit: bool = False, port_scan: bool = False,
                    rate_anomaly: bool = False, severity: int = 0,
                    escalate: bool = False, seq: int = 0) -> bytes:
-    """Build a 20-byte valid verdict frame (magic=0xA5). Inverse of decode_verdict.
+    """Build a 32-byte valid verdict frame (magic=0xA5). Inverse of decode_verdict.
 
     Used to generate the shared format vectors and, later, the CPU reference
     classifier's output for the FPGA-vs-CPU comparison.
     """
     mask = (bloom_hit << 0) | (port_scan << 1) | (rate_anomaly << 2)
     flags = _FLAG_ESCALATE if escalate else 0
-    return bytes([VERDICT_MAGIC, mask, severity, flags, seq & 0xFF]) + bytes(15)
+    head = bytes([VERDICT_MAGIC, mask, severity, flags, seq & 0xFF])
+    return head + bytes(VERDICT_LEN - len(head))
 
 
 def decode_verdict(frame: bytes) -> Verdict:
-    """Decode a 20-byte verdict frame into its fields."""
+    """Decode a 32-byte verdict frame into its fields."""
     if len(frame) != VERDICT_LEN:
         raise ValueError(f"verdict frame must be {VERDICT_LEN} bytes, got {len(frame)}")
     mask = frame[1]

@@ -26,14 +26,16 @@ import time
 from bloom import BloomFilter, TEST_C2_SET, ip_to_int
 from classifier import Classifier
 
-_TAIL = struct.Struct(">HHBBHI")  # sport,dport,proto,flags,size,reserved
+_TAIL = struct.Struct(">HHBBHI")  # sport,dport,proto,flags,size,reserved (4B)
 
 
 def _pack(rng, src_int, dst_int) -> bytes:
+    # 8B IPs + 12B tail = 20, then 12 more reserved bytes -> 32B v2 frame.
     return (struct.pack(">II", src_int, dst_int)
             + _TAIL.pack(rng.randint(1, 65535), rng.randint(1, 65535),
                          rng.choice((6, 17, 1)), rng.randint(0, 255),
-                         rng.randint(40, 1500), 0))
+                         rng.randint(40, 1500), 0)
+            + bytes(12))
 
 
 def _random_clean_ip(rng, bloom: BloomFilter) -> int:
@@ -45,7 +47,7 @@ def _random_clean_ip(rng, bloom: BloomFilter) -> int:
 
 
 def make_workload(n: int, hit_fraction: float = 0.5, seed: int = 0) -> list:
-    """n 20-byte headers; exactly round(n*hit_fraction) contain a C2 IP. Deterministic."""
+    """n 32-byte headers; exactly round(n*hit_fraction) contain a C2 IP. Deterministic."""
     rng = random.Random(seed)
     bloom = BloomFilter.from_ips(TEST_C2_SET)
     c2_ints = [ip_to_int(ip) for ip in TEST_C2_SET]
@@ -85,6 +87,16 @@ def latency_stats(samples_ns) -> dict:
 def fpga_core_latency_ns(cycles: int, clk_hz: int) -> float:
     """Deterministic FPGA classifier-core latency: pipeline cycles x clock period."""
     return cycles / clk_hz * 1e9
+
+
+def link_frame_us(frame_bytes: int, clk_hz: int) -> float:
+    """SPI transport cost of one frame: full-duplex, so frame_bytes*8 bits at clk_hz.
+
+    The link cost is separate from the classifier compute and is what the step-0
+    clock upgrade attacks: v1 was 20B @ 1 MHz = 160 us/frame; v2 is 32B at the
+    locked clock.
+    """
+    return frame_bytes * 8 / clk_hz * 1e6
 
 
 def run_cpu(headers, bloom: BloomFilter):
@@ -140,8 +152,12 @@ def main() -> None:
     print(f"  latency/pkt  {fpga_ns:.1f} ns  (deterministic, 0 jitter)")
     print(f"Speedup on compute latency (CPU median / FPGA): "
           f"{cpu['median_us'] * 1000 / fpga_ns:.0f}x")
-    print("Note: SPI transport (~160 us/frame @ 1 MHz) is the link cost, separate from "
-          "the classifier compute compared above.")
+    v1_us = link_frame_us(20, 1_000_000)
+    v2_us = link_frame_us(32, 8_000_000)
+    print("Link transport (SPI full-duplex, separate from the compute above):")
+    print(f"  v1  20B @ 1 MHz   {v1_us:6.1f} us/frame  ({1e6 / v1_us:>7,.0f} frames/s)")
+    print(f"  v2  32B @ 8 MHz   {v2_us:6.1f} us/frame  ({1e6 / v2_us:>7,.0f} frames/s)  "
+          f"-> {v1_us / v2_us:.0f}x per-frame (step-0 link upgrade)")
 
 
 def _cpu_name() -> str:

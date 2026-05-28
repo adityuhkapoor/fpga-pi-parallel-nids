@@ -19,7 +19,7 @@ FRAMES = [
     bytes(range(FRAME_LEN)),
     bytes([0xAA]) * FRAME_LEN,
     bytes(range(FRAME_LEN, 2 * FRAME_LEN)),
-    bytes.fromhex("c0000201c6336401d43101bb0618020000000000"),  # RFC 5737 doc IPs
+    bytes.fromhex("c0000201c6336401d43101bb0618020000000000" + "00" * 12),  # RFC 5737 doc IPs
 ]
 
 

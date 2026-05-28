@@ -6,7 +6,7 @@
 // latched at CS assertion, so the caller supplies frame N-1's response while frame N
 // is received (frame-pipelined, same timing as the v2 verdict path).
 module spi_slave_rx #(
-    parameter FRAME_BYTES = 20
+    parameter FRAME_BYTES = 32
 )(
     input  wire                     clk,
     input  wire                     rst,

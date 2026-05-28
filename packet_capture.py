@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture packets, extract a fixed 20-byte header, print it (and optionally send over SPI).
+"""Capture packets, extract a fixed 32-byte header, print it (and optionally send over SPI).
 
 Stage 1: capture + extraction + packing. With --spi, each header is also clocked
 out to the FPGA over SPI (spidev0.0, see PROTOCOL.md); without it, capture only.
@@ -17,12 +17,13 @@ from scapy.all import sniff, IP, TCP, UDP
 from spi_link import SpiLink, FRAME_LEN
 from verdict import decode_verdict
 
-# Fixed 20-byte header, big-endian, word-aligned (five 32-bit words):
+# Fixed 32-byte v2 frame, big-endian, word-aligned. The five meaningful 32-bit words
+# (the v1 20B layout) followed by 12 reserved zero bytes:
 #   word0: src IPv4
 #   word1: dst IPv4
 #   word2: src port | dst port
 #   word3: proto | tcp flags | size
-#   word4: reserved
+#   word4: reserved | words 5-7: reserved (zero)
 # IPv4 addresses are packed as raw network bytes (inet_aton); the rest via _TAIL.
 _TAIL = struct.Struct(">HHBBHI")  # src_port, dst_port, proto, flags, size, reserved
 HEADER_LEN = FRAME_LEN
@@ -31,7 +32,7 @@ _PROTO_NAMES = {1: "ICMP", 6: "TCP", 17: "UDP"}
 
 
 def extract_header(pkt) -> bytes | None:
-    """Pack one IPv4 packet into the 20-byte header; return None for non-IPv4."""
+    """Pack one IPv4 packet into the 32-byte header; return None for non-IPv4."""
     if IP not in pkt:
         return None
     ip = pkt[IP]
@@ -50,6 +51,7 @@ def extract_header(pkt) -> bytes | None:
         socket.inet_aton(ip.src)
         + socket.inet_aton(ip.dst)
         + _TAIL.pack(src_port, dst_port, ip.proto, flags, len(pkt) & 0xFFFF, 0)
+        + bytes(HEADER_LEN - 20)   # pad the v1 20B layout out to the 32B v2 frame
     )
     assert len(header) == HEADER_LEN
     return header
@@ -57,7 +59,7 @@ def extract_header(pkt) -> bytes | None:
 
 def format_row(pkt, header: bytes) -> str:
     ip = pkt[IP]
-    src_port, dst_port, proto, _flags, size, _ = _TAIL.unpack(header[8:])
+    src_port, dst_port, proto, _flags, size, _ = _TAIL.unpack(header[8:20])
     proto_name = _PROTO_NAMES.get(proto, str(proto))
     flag_str = str(pkt[TCP].flags) if TCP in pkt else "-"
     return (
@@ -77,7 +79,7 @@ def make_handler(link=None):
         count += 1
         row = format_row(pkt, header)
         if link is not None:
-            # Full-duplex: the 20 bytes read back carry the verdict for the PREVIOUS
+            # Full-duplex: the 32 bytes read back carry the verdict for the PREVIOUS
             # frame (one-frame pipeline lag, PROTOCOL.md); seq in the summary says which.
             verdict = decode_verdict(link.send_frame(header))
             row += f"  verdict<-{verdict.describe()}"
@@ -87,7 +89,7 @@ def make_handler(link=None):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Capture + extract fixed 20-byte packet headers.")
+    ap = argparse.ArgumentParser(description="Capture + extract fixed 32-byte packet headers.")
     ap.add_argument("--iface", default="eth0", help="interface to sniff (default: eth0)")
     ap.add_argument("--timeout", type=int, default=0, help="stop after N seconds (0 = forever)")
     ap.add_argument("--count", type=int, default=0, help="stop after N packets (0 = unlimited)")

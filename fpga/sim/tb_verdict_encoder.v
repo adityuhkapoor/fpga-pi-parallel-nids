@@ -3,7 +3,7 @@
 // verdict_encoder and checks it emits each exact 20-byte frame. Vectors cover the seq
 // boundaries (255, wrap-to-0) and the post-reset all-zero "no verdict" frame.
 module tb_verdict_encoder;
-    localparam FRAME_BYTES = 20;
+    localparam FRAME_BYTES = 32;
     localparam FRAME_BITS  = FRAME_BYTES*8;
 
     reg clk = 1'b0, rst = 1'b1, classify_valid = 1'b0;
@@ -50,20 +50,20 @@ module tb_verdict_encoder;
         #20 rst = 1'b0;
 
         //          #  mask  sev  esc  seq    expected 20-byte frame
-        drive_check(1, 3'b000, 2'd0, 1'b0, 8'd1,   160'ha500000001000000000000000000000000000000);
-        drive_check(2, 3'b001, 2'd3, 1'b1, 8'd2,   160'ha501030102000000000000000000000000000000);
-        drive_check(3, 3'b010, 2'd2, 1'b0, 8'd3,   160'ha502020003000000000000000000000000000000);
-        drive_check(4, 3'b100, 2'd1, 1'b0, 8'd4,   160'ha504010004000000000000000000000000000000);
-        drive_check(5, 3'b111, 2'd3, 1'b1, 8'd5,   160'ha507030105000000000000000000000000000000);
-        drive_check(6, 3'b000, 2'd0, 1'b0, 8'd255, 160'ha5000000ff000000000000000000000000000000);
-        drive_check(7, 3'b001, 2'd3, 1'b1, 8'd0,   160'ha501030100000000000000000000000000000000);
+        drive_check(1, 3'b000, 2'd0, 1'b0, 8'd1,   256'ha500000001000000000000000000000000000000000000000000000000000000);
+        drive_check(2, 3'b001, 2'd3, 1'b1, 8'd2,   256'ha501030102000000000000000000000000000000000000000000000000000000);
+        drive_check(3, 3'b010, 2'd2, 1'b0, 8'd3,   256'ha502020003000000000000000000000000000000000000000000000000000000);
+        drive_check(4, 3'b100, 2'd1, 1'b0, 8'd4,   256'ha504010004000000000000000000000000000000000000000000000000000000);
+        drive_check(5, 3'b111, 2'd3, 1'b1, 8'd5,   256'ha507030105000000000000000000000000000000000000000000000000000000);
+        drive_check(6, 3'b000, 2'd0, 1'b0, 8'd255, 256'ha5000000ff000000000000000000000000000000000000000000000000000000);
+        drive_check(7, 3'b001, 2'd3, 1'b1, 8'd0,   256'ha501030100000000000000000000000000000000000000000000000000000000);
 
         // Vector 8: reset -> all-zero "no verdict" frame, magic != 0xA5.
         @(posedge clk); #1; rst = 1'b1; classify_valid = 1'b0;
         @(posedge clk); #1;
         if (verdict_frame !== {FRAME_BITS{1'b0}})
             begin $display("FAIL v8 reset frame %h != 0", verdict_frame); errors=errors+1; end
-        if (verdict_frame[159:152] === 8'hA5)
+        if (verdict_frame[FRAME_BITS-1 -: 8] === 8'hA5)
             begin $display("FAIL v8 reset magic is 0xA5"); errors=errors+1; end
 
         if (errors == 0) $display("PASS: verdict_encoder matches all 8 format vectors");

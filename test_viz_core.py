@@ -4,7 +4,7 @@ from viz_core import Stats, format_row, format_summary, ips_from_header
 
 _CLEAN = decode_verdict(encode_verdict(seq=1))
 _THREAT = decode_verdict(encode_verdict(bloom_hit=True, severity=3, escalate=True, seq=2))
-_NONE = decode_verdict(bytes(20))
+_NONE = decode_verdict(bytes(32))
 
 
 def test_ips_from_header_reads_src_and_dst():

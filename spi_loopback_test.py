@@ -13,7 +13,7 @@ PATTERNS = {
     "0xAA":         bytes([0xAA]) * FRAME_LEN,
     "0x55":         bytes([0x55]) * FRAME_LEN,
     # 192.0.2.1 -> 198.51.100.1 (RFC 5737 doc IPs), sport 54321, dport 443, TCP, flags 0x18, size 512
-    "header-like":  bytes.fromhex("c0000201c6336401d43101bb0618020000000000"),
+    "header-like":  bytes.fromhex("c0000201c6336401d43101bb0618020000000000" + "00" * 12),
 }
 
 

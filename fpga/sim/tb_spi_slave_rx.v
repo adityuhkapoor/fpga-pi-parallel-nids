@@ -5,9 +5,9 @@
 //     back during frame N+1; the first frame returns zeros.
 // Golden vectors use RFC5737 documentation addresses (not real traffic).
 module tb_spi_slave_rx;
-    localparam FRAME_BYTES = 20;
+    localparam FRAME_BYTES = 32;
     localparam FRAME_BITS  = FRAME_BYTES*8;
-    localparam HALF        = 250;   // SCLK half-period (ns) -> 2 MHz, ~50x oversampled
+    integer    HALF        = 250;   // SCLK half-period (ns); 250 -> 2 MHz, ~50x oversampled
 
     reg clk = 1'b0, rst = 1'b1;
     reg sclk = 1'b0, cs_n = 1'b1, mosi = 1'b0;
@@ -62,12 +62,12 @@ module tb_spi_slave_rx;
     endtask
 
     // src 192.0.2.10  dst 198.51.100.20  sport 4096 dport 443 proto TCP flags PSH|ACK size 1500
-    localparam [FRAME_BITS-1:0] A = 160'hC000020A_C6336414_100001BB_061805DC_00000000;
+    localparam [FRAME_BITS-1:0] A = 256'hC000020A_C6336414_100001BB_061805DC_00000000000000000000000000000000;
     // src 203.0.113.5 dst 192.0.2.200  sport 22   dport 51000 proto UDP flags 0 size 64
-    localparam [FRAME_BITS-1:0] B = 160'hCB007105_C00002C8_0016C738_11000040_00000000;
+    localparam [FRAME_BITS-1:0] B = 256'hCB007105_C00002C8_0016C738_11000040_00000000000000000000000000000000;
 
     integer errors = 0;
-    reg [FRAME_BITS-1:0] e1, e2, e3;
+    reg [FRAME_BITS-1:0] e1, e2, e3, e4;
 
     task expect_eq(input [FRAME_BITS-1:0] got, input [FRAME_BITS-1:0] exp, input [127:0] tag);
         begin
@@ -95,6 +95,12 @@ module tb_spi_slave_rx;
             $display("FAIL: rx_frame_valid pulsed %0d times, expected 3", frame_valid_count);
             errors = errors + 1;
         end
+
+        // Elevated-rate logic check at HALF=34ns (~14.7 MHz). xsim has no SI/metastability
+        // model, so this proves the deserialize logic, not the silicon ceiling (spi_ber_ramp.py).
+        HALF = 34;
+        send_frame(A, e4);
+        expect_eq(rx_frame, A, "rx_fast");   // deserialize correct at the faster clock
 
         if (errors == 0) $display("PASS: spi_slave_rx deserialize + frame-pipelined echo");
         else             $display("FAIL: %0d error(s)", errors);

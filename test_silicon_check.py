@@ -17,13 +17,13 @@ EXP = [
 
 
 def test_perfect_fresh_run_passes():
-    rx = [bytes(20)] + list(EXP)  # rx[0]=no-verdict, rx[1..3]=verdicts, seq 1..3
+    rx = [bytes(32)] + list(EXP)  # rx[0]=no-verdict, rx[1..3]=verdicts, seq 1..3
     assert evaluate_run(rx, EXP).passed is True
 
 
 def test_content_mismatch_fails():
     # header 1 should be clean but the board returned a bloom hit
-    rx = [bytes(20),
+    rx = [bytes(32),
           encode_verdict(bloom_hit=True, severity=3, escalate=True, seq=1),
           EXP[1], EXP[2]]
     assert evaluate_run(rx, EXP).passed is False
@@ -31,7 +31,7 @@ def test_content_mismatch_fails():
 
 def test_seq_offset_but_correct_content_passes_with_note():
     # board wasn't reset: seqs start at 11, but content is right and increments by 1
-    rx = [bytes(20),
+    rx = [bytes(32),
           encode_verdict(seq=11),
           encode_verdict(bloom_hit=True, severity=3, escalate=True, seq=12),
           encode_verdict(seq=13)]
@@ -41,7 +41,7 @@ def test_seq_offset_but_correct_content_passes_with_note():
 
 
 def test_broken_seq_increment_fails():
-    rx = [bytes(20),
+    rx = [bytes(32),
           encode_verdict(seq=1),
           encode_verdict(bloom_hit=True, severity=3, escalate=True, seq=5),  # gap
           encode_verdict(seq=6)]
@@ -52,4 +52,4 @@ def test_needs_a_flush_frame():
     import pytest
     # only N frames, no flush -> can't read the last verdict
     with pytest.raises(ValueError):
-        evaluate_run([bytes(20)] + list(EXP[:2]), EXP)
+        evaluate_run([bytes(32)] + list(EXP[:2]), EXP)

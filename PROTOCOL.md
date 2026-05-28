@@ -11,11 +11,13 @@ SPI slave both build against this. Any change must be agreed by both sides.
 - **Mode 0** (CPOL=0, CPHA=0): clock idles low, data sampled on the rising edge.
 - **MSB-first.**
 - **8-bit** words.
-- **Clock: 1 MHz** to start (conservative for jumper wiring). Raise only after the link is proven solid.
-- **Framing: CE0 (chip-select).** CS is held low for an entire transfer; one frame = exactly **20 bytes** between CS going low and CS going high. The FPGA resets its byte counter on the CS rising edge. (`spidev.xfer2()` asserts CS for the duration of each call and deasserts after — so one `spi_send()` == one CS-framed 20-byte frame.)
+- **Clock: 8 MHz.** v1 ran 1 MHz (conservative for jumper wiring); a step-0 hardware BER
+  ramp found the zero-error ceiling is 9 MHz over the Pmod jumpers (signal-integrity
+  limited), so v2 runs **8 MHz** derated.
+- **Framing: CE0 (chip-select).** CS is held low for an entire transfer; one frame = exactly **32 bytes** between CS going low and CS going high. The FPGA resets its byte counter on the CS rising edge. (`spidev.xfer2()` asserts CS for the duration of each call and deasserts after — so one `spi_send()` == one CS-framed 32-byte frame.)
 
-## Request frame — 20-byte packet header (Pi → FPGA, MOSI)
-Big-endian, word-aligned (five 32-bit words):
+## Request frame — 32-byte packet header (Pi → FPGA, MOSI)
+Big-endian, word-aligned. The 16 header bytes below (the v1 layout) plus 16 reserved bytes:
 
 | Bytes | Field        | Notes                            |
 |------:|--------------|----------------------------------|
@@ -26,14 +28,14 @@ Big-endian, word-aligned (five 32-bit words):
 | 12    | protocol     | IP protocol number               |
 | 13    | TCP flags    | FIN SYN RST PSH ACK URG ECE CWR  |
 | 14–15 | packet size  | bytes                            |
-| 16–19 | reserved     | zero                             |
+| 16–31 | reserved     | zero                             |
 
-## Response — 20-byte verdict (FPGA → Pi, MISO)
-SPI is full-duplex: during each 20-byte transfer the FPGA shifts 20 bytes back.
+## Response — 32-byte verdict (FPGA → Pi, MISO)
+SPI is full-duplex: during each 32-byte transfer the FPGA shifts 32 bytes back.
 
 - **v1 (bring-up):** FPGA returns zeros (or a frame echo); the Pi ignores the read
   data. `magic != 0xA5` means "no verdict here," so v1 is forward-compatible with v2.
-- **v2 (pipelined):** the 20 bytes shifted back during the transfer of frame N carry
+- **v2 (pipelined):** the 32 bytes shifted back during the transfer of frame N carry
   the verdict for the **previous** frame, N−1 — the classifier needs cycles, so the
   result lags by exactly one frame. The very first transfer (no prior frame) and any
   transfer after reset return `magic = 0x00`, i.e. "no valid verdict yet."
@@ -47,7 +49,7 @@ Verdict byte layout (single-byte, byte-aligned fields — no multi-byte endianne
 | 2     | **severity**      | 0 = clean · 1 = low · 2 = med · 3 = high (max severity across hit stages) |
 | 3     | **flags**         | bit0 = escalate (Pi should deep-inspect this flow) · bits 1–7 reserved (0) |
 | 4     | **seq**           | `frame_count & 0xFF` — **1-based** (first received frame → `seq=1`); lets the Pi line up the one-frame lag |
-| 5–19  | reserved          | zero                                                                    |
+| 5–31  | reserved          | zero                                                                    |
 
 Notes:
 - **`seq` semantics (1-based, confirmed by both sides):** `frame_count` starts at 0 on
@@ -84,5 +86,5 @@ Rules:
 
 ## Loopback test (Pi only, before the FPGA exists)
 Bridge Pi **pin 19 (MOSI) ↔ pin 21 (MISO)** with one jumper. `spi_send()` writes
-the 20 bytes; the bytes read back on the same transfer must equal what was sent.
+the 32 bytes; the bytes read back on the same transfer must equal what was sent.
 This proves the Pi's SPI transmit/receive path independent of the FPGA.

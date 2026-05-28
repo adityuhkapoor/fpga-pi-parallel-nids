@@ -4,8 +4,8 @@ import spidev
 # Locked SPI parameters (PROTOCOL.md).
 BUS, DEVICE = 0, 0           # /dev/spidev0.0 (SPI0, CE0)
 MODE = 0b00                  # CPOL=0, CPHA=0
-MAX_SPEED_HZ = 1_000_000     # 1 MHz
-FRAME_LEN = 20
+MAX_SPEED_HZ = 8_000_000     # 8 MHz (step-0 measured ceiling 9 MHz, run derated)
+FRAME_LEN = 32               # v2 frame width (v1 was 20)
 
 
 class SpiLink:
@@ -18,7 +18,7 @@ class SpiLink:
         self.spi.lsbfirst = False  # MSB-first
 
     def send_frame(self, frame: bytes) -> bytes:
-        """Clock a 20-byte frame out on MOSI; return the 20 bytes shifted in on MISO.
+        """Clock a 32-byte frame out on MOSI; return the 32 bytes shifted in on MISO.
 
         xfer2 holds CE0 low for the whole transfer and raises it after — the
         chip-select framing the FPGA uses to delimit frames.

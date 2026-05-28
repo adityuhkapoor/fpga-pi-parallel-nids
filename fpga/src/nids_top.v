@@ -12,7 +12,7 @@ module nids_top (
     output wire        miso,
     output wire [15:0] led
 );
-    localparam FRAME_BYTES = 20;
+    localparam FRAME_BYTES = 32;
     localparam FRAME_BITS  = FRAME_BYTES*8;
 
     wire rst = btnC;

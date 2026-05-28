@@ -1,15 +1,16 @@
 """Ordered v1.1 golden scenarios: input header sequences (hex). State accumulates
 across frames; frame_count = index. Shared by tests and the golden-table generator.
 
-header = src_ip dst_ip src_port dst_port proto flags size(2B) + 4B reserved (zeros).
+header = src_ip dst_ip src_port dst_port proto flags size(2B) + 16B reserved (zeros) = 32B.
 RFC5737 doc IPs only. C2 set (for bloom): 198.51.100.1=0xC6336401,
 203.0.113.5=0xCB007105, 192.0.2.99=0xC0000263.
 """
 import struct
 
 def hdr(src, dst, sport, dport, proto, flags, size=60):
+    # 16 header bytes (5-tuple + flags + size) + 16 reserved zero bytes = 32B v2 frame.
     return (struct.pack(">IIHHBBH", src, dst, sport, dport, proto, flags, size)
-            + b"\x00\x00\x00\x00").hex()
+            + bytes(16)).hex()
 
 # benign: varied normal traffic, never trips a new stage and never a C2 IP
 BENIGN = [

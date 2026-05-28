@@ -12,7 +12,7 @@ RESET = "\033[0m"
 
 
 def ips_from_header(header: bytes):
-    """(src, dst) dotted IPv4 from a 20-byte header (bytes 0-3 src, 4-7 dst)."""
+    """(src, dst) dotted IPv4 from a header frame (bytes 0-3 src, 4-7 dst)."""
     return socket.inet_ntoa(header[0:4]), socket.inet_ntoa(header[4:8])
 
 

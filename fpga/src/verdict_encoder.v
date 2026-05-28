@@ -4,7 +4,7 @@
 // magic is 0xA5 only for a real verdict; the register powers up / resets to all-zero,
 // so the first transfer (and any post-reset transfer) carries magic=0x00 = "no verdict".
 module verdict_encoder #(
-    parameter FRAME_BYTES = 20
+    parameter FRAME_BYTES = 32
 )(
     input  wire                     clk,
     input  wire                     rst,
