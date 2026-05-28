@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  schedule:
+    - cron: '30 23 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Promote ripe queued commits to main
+        run: |
+          set -e
+          tomorrow=$(date -u -d 'tomorrow' +%Y-%m-%d)
+          # Sort by date (ISO dates sort lexically = chronologically). Push oldest first
+          # so each push is a fast-forward against main.
+          git ls-remote origin 'refs/queued/*' | awk '{print $2 " " $1}' | sort | while read refname sha; do
+            date_str=${refname#refs/queued/}
+            if [[ "$date_str" < "$tomorrow" ]]; then
+              echo "promoting $refname ($sha)"
+              git fetch origin "$sha"
+              git push origin "$sha:main"
+              git push origin --delete "$refname"
+            fi
+          done
