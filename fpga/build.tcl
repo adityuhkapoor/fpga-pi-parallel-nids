@@ -9,12 +9,14 @@ create_project -force nids $proj_dir -part xc7a35tcpg236-1
 add_files -norecurse [list $origin/src/nids_top.v $origin/src/spi_slave_rx.v \
                            $origin/src/header_parser.v $origin/src/bloom_filter.v \
                            $origin/src/scan_rate.v $origin/src/classifiers.v \
-                           $origin/src/verdict_encoder.v]
+                           $origin/src/verdict_encoder.v \
+                           $origin/src/cms.v $origin/src/hll.v $origin/src/telemetry.v]
 add_files -norecurse $origin/src/bloom_init.mem
 add_files -fileset constrs_1 -norecurse $origin/constraints/nids.xdc
 set_property top nids_top [current_fileset]
 update_compile_order -fileset sources_1
 
+set_property strategy Performance_ExtraTimingOpt [get_runs impl_1]
 launch_runs synth_1 -jobs 4
 wait_on_run synth_1
 if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {

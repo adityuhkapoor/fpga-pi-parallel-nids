@@ -66,7 +66,12 @@ module tb_nids_top;
     localparam [FRAME_BITS-1:0] A = 256'hC000020A_C6336414_100001BB_061805DC_00000000000000000000000000000000;
     localparam [FRAME_BITS-1:0] B = 256'hCB007105_C00002C8_0016C738_11000040_00000000000000000000000000000000;
 
-    reg [FRAME_BITS-1:0] r1, r2, r3;
+    // Query frame for opcode 0x02 (snapshot). Byte 16 = 0x02; bytes 0-15 don't matter for snapshot.
+    // Layout: byte 16 sits at bits [FRAME_BITS-1-128 -: 8] = [127:120] for FRAME_BITS=256.
+    localparam [FRAME_BITS-1:0] SNAP_Q =
+        256'h0000000000000000_0000000000000000_0200000000000000_0000000000000000;
+
+    reg [FRAME_BITS-1:0] r1, r2, r3, r4, r5;
 
     initial begin
         #40 btnC = 1'b0;          // release reset
@@ -76,14 +81,23 @@ module tb_nids_top;
         send_frame(B, r2);        // transfer 2: verdict for frame 1 (seq=1)
         send_frame(A, r3);        // transfer 3: verdict for frame 2 (seq=2)
 
-        // transfer 1: "no verdict yet" -> magic must not be 0xA5 (it's 0x00, all reserved 0)
         if (r1[FRAME_BITS-1 -: 8] === 8'hA5) begin $display("FAIL t1: magic 0xA5 but no prior frame"); errors=errors+1; end
         if (r1 !== {FRAME_BITS{1'b0}}) begin $display("FAIL t1: expected all-zero, got %h", r1); errors=errors+1; end
 
         check_verdict(2, r2, 8'hA5, 8'h00, 8'h00, 8'h00, 8'h01);   // frame 1 (A) clean
         check_verdict(3, r3, 8'hA5, 8'h01, 8'h03, 8'h01, 8'h02);   // frame 2 (B) bloom hit
 
-        if (errors == 0) $display("PASS: nids_top round-trip, pipelined verdicts (clean + bloom hit)");
+        // --- opcode 0x02: snapshot query. Send a SNAP_Q frame; r4 returns frame-3's verdict
+        // (one-frame lag carries A's verdict for frame 3, seq=3, clean). r5 carries the snapshot
+        // response for SNAP_Q -> magic must be 0x5A, distinct from verdict magic 0xA5.
+        send_frame(SNAP_Q, r4);
+        send_frame({FRAME_BITS{1'b0}}, r5);
+
+        check_verdict(4, r4, 8'hA5, 8'h00, 8'h00, 8'h00, 8'h03);   // frame 3 (A again) clean
+        if (r5[FRAME_BITS-1 -: 8] !== 8'h5A) begin
+            $display("FAIL snapshot magic %02h != 5A", r5[FRAME_BITS-1 -: 8]); errors=errors+1; end
+
+        if (errors == 0) $display("PASS: nids_top round-trip, pipelined verdicts + snapshot response");
         else             $display("FAIL: %0d error(s)", errors);
         $finish;
     end

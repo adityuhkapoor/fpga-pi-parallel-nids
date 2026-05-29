@@ -28,7 +28,8 @@ Big-endian, word-aligned. The 16 header bytes below (the v1 layout) plus 16 rese
 | 12    | protocol     | IP protocol number               |
 | 13    | TCP flags    | FIN SYN RST PSH ACK URG ECE CWR  |
 | 14–15 | packet size  | bytes                            |
-| 16–31 | reserved     | zero                             |
+| 16    | **opcode**   | `0x00` classify (header above) · `0x01` CMS point-query · `0x02` window snapshot · `0x03` HLL harmonic. v1 frames sent byte 16 = 0, so 0x00 is the back-compatible default. |
+| 17–31 | reserved     | zero                             |
 
 ## Response — 32-byte verdict (FPGA → Pi, MISO)
 SPI is full-duplex: during each 32-byte transfer the FPGA shifts 32 bytes back.
@@ -66,6 +67,48 @@ Notes:
   `0x00`/`0xFF` because it makes a bit-shift or stuck line on MISO immediately visible.
 - Reserved bits/bytes are 0 on the wire today; receivers must ignore them so the
   layout can grow without breaking the contract.
+
+## Telemetry responses (FPGA → Pi, MISO; opcodes 0x01–0x03)
+Pipelining is identical to the verdict path: the response for an opcode 0x01/0x02/0x03 request
+sent on frame N is shifted back during frame N+1. Telemetry responses use **magic `0x5A`**
+(distinct from the verdict's `0xA5`) so the Pi can tell verdict vs telemetry-response apart with
+no per-frame state. All multi-byte fields are big-endian, MSB at the lowest byte index.
+
+**`0x01` — CMS point-query.** Request bytes 0–3 carry the queried src_ip; the FPGA returns the
+live (current-window) Count-Min estimate.
+
+| Bytes | Field        | Notes                              |
+|------:|--------------|------------------------------------|
+| 0     | magic        | `0x5A`                             |
+| 1–4   | queried_key  | echo of the request's src_ip       |
+| 5–6   | count        | 16-bit; low 14 carry the count     |
+| 7–31  | reserved     | zero                               |
+
+**`0x02` — window snapshot.** Stable values latched at the last 1-second window boundary.
+
+| Bytes | Field          | Notes                        |
+|------:|----------------|------------------------------|
+| 0     | magic          | `0x5A`                       |
+| 1–2   | window_index   | 16-bit, wraps                |
+| 3–6   | total_packets  | 32-bit, packets that window  |
+| 7–12  | harmonic_sum   | 48-bit scaled sum (HLL)      |
+| 13–14 | zeros          | 16-bit; low 12 = V (empty registers) |
+| 15–16 | top1_count     | 16-bit; low 14 = CMS estimate of the top talker |
+| 17–20 | top1_key       | src_ip of the top talker     |
+| 21–31 | reserved       | zero                         |
+
+**`0x03` — live HLL harmonic.** Current-window HLL state for off-line cardinality finishing on
+the Pi: `card = α · m² · 2³² / harmonic_sum`, with **linear counting** `m · ln(m / V)` when the
+raw estimate ≤ 2.5m and V > 0. Both αm and the linear correction live in `hll.py` /
+`telemetry.py` so the Pi and the twin agree exactly.
+
+| Bytes | Field        | Notes                              |
+|------:|--------------|------------------------------------|
+| 0     | magic        | `0x5A`                             |
+| 1–6   | harmonic_sum | 48-bit scaled sum                  |
+| 7–8   | zeros        | 16-bit; low 12 = V                 |
+| 9–10  | m            | 16-bit = 2048 (HLL register count) |
+| 11–31 | reserved     | zero                               |
 
 ## Physical wiring (verified against the Pi's `pinout` and pinout.xyz)
 Both sides are 3.3V — wire directly, no level shifter.
