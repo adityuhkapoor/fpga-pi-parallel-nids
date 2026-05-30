@@ -17,6 +17,9 @@ module tb_classifiers;
         .clk(clk), .rst(rst), .src_ip(src_ip), .dst_ip(dst_ip),
         .src_port(src_port), .dst_port(dst_port), .proto(proto), .tcp_flags(tcp_flags),
         .pkt_size(pkt_size), .frame_count(frame_count), .fields_valid(fields_valid),
+        .port_thresh(16'd5), .host_thresh(16'd5), .rate_thresh(16'd8),         // v1.1 defaults
+        .bf_w_addr(12'd0), .bf_w_data(16'd0), .bf_w_en(1'b0),                  // bloom port-B idle
+        .bf_r_addr(12'd0), .bf_r_en(1'b0), .bf_r_data(),
         .hit_mask(hit_mask), .severity(severity), .escalate(escalate),
         .classify_valid(classify_valid)
     );

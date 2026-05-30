@@ -11,10 +11,11 @@ file copy -force $src/bloom_init.mem $here/bloom_init.mem
 
 exec xvlog $src/spi_slave_rx.v $src/header_parser.v $src/bloom_filter.v \
            $src/scan_rate.v $src/classifiers.v $src/verdict_encoder.v $src/nids_top.v \
-           $src/cms.v $src/hll.v $src/telemetry.v \
+           $src/cms.v $src/hll.v $src/telemetry.v $src/rule_store.v $src/thresholds.v \
            $here/tb_spi_slave_rx.v $here/tb_header_parser.v $here/tb_verdict_encoder.v \
            $here/tb_bloom_filter.v $here/tb_nids_top.v $here/tb_verdict_golden.v \
-           $here/tb_scan_rate.v $here/tb_classifiers.v $here/tb_cms.v $here/tb_hll.v $here/tb_telemetry.v
+           $here/tb_scan_rate.v $here/tb_classifiers.v $here/tb_cms.v $here/tb_hll.v $here/tb_telemetry.v \
+           $here/tb_rule_store.v $here/tb_thresholds.v
 
 proc run_tb {top} {
     exec xelab $top -s sim_$top
@@ -36,3 +37,5 @@ run_tb tb_classifiers
 run_tb tb_cms
 run_tb tb_hll
 run_tb tb_telemetry
+run_tb tb_rule_store
+run_tb tb_thresholds

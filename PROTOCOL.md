@@ -110,6 +110,51 @@ raw estimate ≤ 2.5m and V > 0. Both αm and the linear correction live in `hll
 | 9–10  | m            | 16-bit = 2048 (HLL register count) |
 | 11–31 | reserved     | zero                               |
 
+## Runtime control (opcodes 0x10–0x15, MOSI write + MISO read-back; v2 step 2)
+
+Three classifier surfaces are runtime-writable from the Pi without a bitstream rebuild: the
+Bloom blocklist (replaces `bloom_init.mem` at runtime), the scan_rate thresholds (PORT/HOST/RATE
+defaults 5/5/8, restored on power-on reset), and the 512-entry rule store (consumed by step 4's
+closed-loop enforcement). Pipelining is identical to the verdict + telemetry paths: the response
+for a request sent on frame N is shifted back during frame N+1, with **magic `0x5A`**.
+
+**Request frames** (byte 16 = opcode):
+
+| op | direction | request payload                                          | response                                          |
+|---|---|---|---|
+| `0x10` | W | `word_addr:16` (b0–1, low 12 used) · `word_value:16` (b2–3) | `{0x5A, op=0x10}` ack                              |
+| `0x11` | W | `threshold_id:8` (b0) · `value:16` (b1–2)                | `{0x5A, op=0x11}` ack                              |
+| `0x12` | W | `rule_idx:16` (b0–1, low 9 used) · `rule:72` (b2–10)     | `{0x5A, op=0x12}` ack                              |
+| `0x13` | R | `word_addr:16` (b0–1)                                    | `{0x5A, addr_echo:16, word_value:16}`              |
+| `0x14` | R | `threshold_id:8` (b0)                                    | `{0x5A, id_echo:8, value:16}`                      |
+| `0x15` | R | `rule_idx:16` (b0–1)                                     | `{0x5A, idx_echo:16, rule:72}`                     |
+
+**Rule format** (9 bytes = 72 bits, byte-aligned):
+
+| Bytes | Field      | Notes                                                                    |
+|------:|------------|--------------------------------------------------------------------------|
+| 0–3   | `src_ip`   | source IP pattern this rule matches                                      |
+| 4     | `action`   | bit 0 drop/flag · bit 1 alert · bit 2 escalate · bits 3–7 reserved (0)   |
+| 5     | `severity` | 0–3 in low 4 bits (max with v1.1 classifier severity); high 4 reserved   |
+| 6     | `epoch`    | rule active only if stored == current `rule_epoch` register (mass-expire) |
+| 7–8   | reserved   | zero                                                                     |
+
+**Threshold IDs:**
+
+| id    | name          | wired into                                              |
+|------:|---------------|---------------------------------------------------------|
+| `0x00`| `PORT_THRESH` | `scan_rate.v` port-fingerprint popcount threshold (5)  |
+| `0x01`| `HOST_THRESH` | `scan_rate.v` host-fingerprint popcount threshold (5)  |
+| `0x02`| `RATE_THRESH` | `scan_rate.v` per-source pkt-count threshold (8)        |
+
+Notes:
+- A 4096-word Bloom rewrite is 4096 frames × 32 µs ≈ **130 ms** at 8 MHz — a control-plane
+  event, brief transient state during the load is acceptable (Pi treats verdicts as advisory
+  while loading).
+- Bloom is dual-port (TDP) on a single RAMB36: classifier queries on port A, Pi
+  writes/readback on port B. One BRAM total.
+- Sample request/response hex is pinned in `RUNTIME_VECTORS.md`.
+
 ## Physical wiring (verified against the Pi's `pinout` and pinout.xyz)
 Both sides are 3.3V — wire directly, no level shifter.
 

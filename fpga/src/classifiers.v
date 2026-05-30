@@ -16,6 +16,12 @@ module classifiers (
     input  wire [15:0] pkt_size,
     input  wire [15:0] frame_count,
     input  wire        fields_valid,
+    // v2 step-2 passthroughs (driven by nids_top from the opcode router / thresholds reg file)
+    input  wire [15:0] port_thresh, host_thresh, rate_thresh,    // scan_rate runtime thresholds
+    input  wire [11:0] bf_w_addr, bf_r_addr,                     // bloom port-B
+    input  wire [15:0] bf_w_data,
+    input  wire        bf_w_en, bf_r_en,
+    output wire [15:0] bf_r_data,
     output reg  [2:0]  hit_mask,        // bit0 bloom, bit1 port-scan, bit2 rate
     output reg  [1:0]  severity,
     output reg         escalate,
@@ -24,7 +30,9 @@ module classifiers (
     wire bloom_hit, bloom_valid;
     bloom_filter u_bloom (
         .clk(clk), .rst(rst), .src_ip(src_ip), .dst_ip(dst_ip),
-        .in_valid(fields_valid), .bloom_hit(bloom_hit), .out_valid(bloom_valid)
+        .in_valid(fields_valid), .bloom_hit(bloom_hit), .out_valid(bloom_valid),
+        .w_addr(bf_w_addr), .w_data(bf_w_data), .w_en(bf_w_en),
+        .r_addr(bf_r_addr), .r_en(bf_r_en),   .r_data(bf_r_data)
     );
 
     wire ps_hit, rate_hit, sr_valid;
@@ -32,6 +40,7 @@ module classifiers (
         .clk(clk), .rst(rst), .src_ip(src_ip), .dst_ip(dst_ip),
         .dst_port(dst_port), .proto(proto), .tcp_flags(tcp_flags),
         .frame_count(frame_count), .in_valid(fields_valid),
+        .port_thresh(port_thresh), .host_thresh(host_thresh), .rate_thresh(rate_thresh),
         .port_scan_hit(ps_hit), .rate_hit(rate_hit), .out_valid(sr_valid)
     );
 

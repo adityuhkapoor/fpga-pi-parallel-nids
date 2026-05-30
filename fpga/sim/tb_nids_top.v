@@ -71,7 +71,29 @@ module tb_nids_top;
     localparam [FRAME_BITS-1:0] SNAP_Q =
         256'h0000000000000000_0000000000000000_0200000000000000_0000000000000000;
 
-    reg [FRAME_BITS-1:0] r1, r2, r3, r4, r5;
+    // --- step-2 control frames (PROTOCOL.md byte layouts) ---
+    // 0x11 threshold write: b0=id=0x02 (RATE_THRESH), b1-2=val=0x000C, byte16=0x11
+    localparam [FRAME_BITS-1:0] THR_W =
+        256'h02000C0000000000_0000000000000000_1100000000000000_0000000000000000;
+    // 0x14 threshold read: b0=id=0x02, byte16=0x14
+    localparam [FRAME_BITS-1:0] THR_R =
+        256'h0200000000000000_0000000000000000_1400000000000000_0000000000000000;
+    // 0x10 bloom write: b0-1=addr=0x0ABC (only low 12 used = 0xABC), b2-3=value=0xBEEF, byte16=0x10
+    localparam [FRAME_BITS-1:0] BLM_W =
+        256'h0ABCBEEF00000000_0000000000000000_1000000000000000_0000000000000000;
+    // 0x13 bloom read: b0-1=addr=0x0ABC, byte16=0x13
+    localparam [FRAME_BITS-1:0] BLM_R =
+        256'h0ABC000000000000_0000000000000000_1300000000000000_0000000000000000;
+    // 0x12 rule write idx=42: b0-1=0x002A, b2-5=src_ip=0xCB007105, b6=action=0x05,
+    //                           b7=sev=0x03, b8=epoch=0x07, byte16=0x12
+    localparam [FRAME_BITS-1:0] RUL_W =
+        256'h002ACB00710505030700000000000000_1200000000000000_0000000000000000;
+    // 0x15 rule read idx=42: b0-1=0x002A, byte16=0x15
+    localparam [FRAME_BITS-1:0] RUL_R =
+        256'h002A000000000000_0000000000000000_1500000000000000_0000000000000000;
+    localparam [FRAME_BITS-1:0] FLUSH = {FRAME_BITS{1'b0}};
+
+    reg [FRAME_BITS-1:0] r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13;
 
     initial begin
         #40 btnC = 1'b0;          // release reset
@@ -97,7 +119,39 @@ module tb_nids_top;
         if (r5[FRAME_BITS-1 -: 8] !== 8'h5A) begin
             $display("FAIL snapshot magic %02h != 5A", r5[FRAME_BITS-1 -: 8]); errors=errors+1; end
 
-        if (errors == 0) $display("PASS: nids_top round-trip, pipelined verdicts + snapshot response");
+        // --- step-2: threshold write 0x11 (id=0x02 RATE, val=0x000C), then read back via 0x14 ---
+        send_frame(THR_W, r6);
+        send_frame(FLUSH, r7);                         // r7 = ack for THR_W
+        send_frame(THR_R, r8);
+        send_frame(FLUSH, r9);                         // r9 = response for THR_R
+
+        if (r7[FRAME_BITS-1 -: 8] !== 8'h5A || r7[FRAME_BITS-9 -: 8] !== 8'h11) begin
+            $display("FAIL thr_w ack: magic=%02h op=%02h",
+                     r7[FRAME_BITS-1 -: 8], r7[FRAME_BITS-9 -: 8]); errors=errors+1; end
+        if (r9[FRAME_BITS-1 -: 8] !== 8'h5A
+            || r9[FRAME_BITS-9 -: 8] !== 8'h02
+            || r9[FRAME_BITS-17 -: 16] !== 16'h000C) begin
+            $display("FAIL thr_r read-back: magic=%02h id=%02h val=%04h (want 5A 02 000C)",
+                     r9[FRAME_BITS-1 -: 8], r9[FRAME_BITS-9 -: 8], r9[FRAME_BITS-17 -: 16]);
+            errors=errors+1; end
+
+        // --- step-2: bloom write 0x10 (addr=0xABC, val=0xBEEF), then read back via 0x13 ---
+        send_frame(BLM_W, r10);
+        send_frame(FLUSH, r11);                        // ack for BLM_W
+        send_frame(BLM_R, r12);
+        send_frame(FLUSH, r13);                        // response for BLM_R
+
+        if (r11[FRAME_BITS-1 -: 8] !== 8'h5A || r11[FRAME_BITS-9 -: 8] !== 8'h10) begin
+            $display("FAIL blm_w ack: magic=%02h op=%02h",
+                     r11[FRAME_BITS-1 -: 8], r11[FRAME_BITS-9 -: 8]); errors=errors+1; end
+        if (r13[FRAME_BITS-1 -: 8] !== 8'h5A
+            || r13[FRAME_BITS-9 -: 16] !== 16'h0ABC
+            || r13[FRAME_BITS-25 -: 16] !== 16'hBEEF) begin
+            $display("FAIL blm_r read-back: magic=%02h addr=%04h val=%04h (want 5A 0ABC BEEF)",
+                     r13[FRAME_BITS-1 -: 8], r13[FRAME_BITS-9 -: 16], r13[FRAME_BITS-25 -: 16]);
+            errors=errors+1; end
+
+        if (errors == 0) $display("PASS: nids_top v1.1 + snapshot + step-2 threshold + bloom roundtrips");
         else             $display("FAIL: %0d error(s)", errors);
         $finish;
     end

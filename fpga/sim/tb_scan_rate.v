@@ -17,6 +17,7 @@ module tb_scan_rate;
         .clk(clk), .rst(rst), .src_ip(src_ip), .dst_ip(dst_ip),
         .dst_port(dst_port), .proto(proto), .tcp_flags(tcp_flags),
         .frame_count(frame_count), .in_valid(in_valid),
+        .port_thresh(16'd5), .host_thresh(16'd5), .rate_thresh(16'd8),   // v1.1 defaults
         .port_scan_hit(port_scan_hit), .rate_hit(rate_hit), .out_valid(out_valid)
     );
 

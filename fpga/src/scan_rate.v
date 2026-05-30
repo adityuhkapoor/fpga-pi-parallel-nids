@@ -25,13 +25,15 @@ module scan_rate (
     input  wire [7:0]  proto,
     input  wire [7:0]  tcp_flags,
     input  wire [15:0] frame_count,
+    input  wire [15:0] port_thresh,   // runtime-configurable via opcode 0x11
+    input  wire [15:0] host_thresh,
+    input  wire [15:0] rate_thresh,
     input  wire        in_valid,
     output reg         port_scan_hit,
     output reg         rate_hit,
     output reg         out_valid
 );
     localparam [31:0] A1 = 32'h9E3779B1, A2 = 32'h85EBCA77;
-    localparam integer PORT_THRESH = 5, HOST_THRESH = 5, RATE_THRESH = 8;
 
     function [7:0] h_bucket(input [31:0] ip);
         reg [63:0] p; begin p = {32'd0, ip} * A1; h_bucket = p[31:24]; end
@@ -103,9 +105,9 @@ module scan_rate (
                       phase <= 2'd3;
                   end
             2'd3: begin                                      // popcount + thresholds (own cycle)
-                      port_scan_hit <= (popcnt16(s_pfp) >= PORT_THRESH) |
-                                       (popcnt16(s_hfp) >= HOST_THRESH);
-                      rate_hit      <= (s_cnt >= RATE_THRESH);
+                      port_scan_hit <= ({11'd0, popcnt16(s_pfp)} >= port_thresh) |
+                                       ({11'd0, popcnt16(s_hfp)} >= host_thresh);
+                      rate_hit      <= ({8'd0,  s_cnt}          >= rate_thresh);
                       out_valid     <= 1'b1;
                       phase         <= 2'd0;
                   end
