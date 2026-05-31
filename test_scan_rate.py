@@ -96,3 +96,41 @@ def test_horizontal_host_scan_fires_on_5_distinct_hosts():
                            proto=6, tcp_flags=0x02, frame_count=i)
         hits.append(scan)
     assert hits == [False, False, False, False, True]
+
+
+# v2 step-2 audit follow-up: prove the twin honors a runtime threshold write -- composing
+# Thresholds with ScanRateTable, the verdict must reflect a written value (not the default).
+def test_runtime_thresholds_change_verdict():
+    from thresholds_model import Thresholds, RATE_THRESH
+    thr = Thresholds()
+    t = ScanRateTable(thresholds=thr)
+    # 5 packets from the same src, proto=17 (UDP, no SYN gate) -> only rate_hit can fire.
+    res = []
+    for i in range(5):
+        res.append(t.update(src_ip=0x0A000010, dst_ip=0x0A000020, dst_port=53,
+                            proto=17, tcp_flags=0, frame_count=i))
+    # default RATE_THRESH=8 -> none of the 5 fire rate yet
+    assert all(not r[1] for r in res), "default thresh should NOT fire rate at pkt_count<=5"
+    # lower the threshold at runtime -> next packet should fire rate_hit
+    thr.write(RATE_THRESH, 6)
+    _, rh = t.update(src_ip=0x0A000010, dst_ip=0x0A000020, dst_port=53,
+                     proto=17, tcp_flags=0, frame_count=5)
+    assert rh, "after lowering RATE_THRESH to 6, the 6th packet must fire rate_hit"
+
+
+def test_thresholds_unknown_id_no_op_to_match_hdl():
+    """HDL: silent no-op on unknown id, returns 0 on read. Twin must match."""
+    from thresholds_model import Thresholds
+    t = Thresholds()
+    # The Pi-side encoder lets through any 8-bit id; the HDL ignores unknown writes silently.
+    # The twin currently raises -- that's the audit's MED #8. We expect EITHER no-op OR raise
+    # consistently; pick no-op-and-return-0 to match HDL.
+    import pytest
+    # Once the twin is aligned, this should NOT raise; until then it does -- marker:
+    try:
+        t.write(0xEE, 0x1234)        # unknown id
+        assert t.read(0xEE) == 0     # HDL returns 0 for unknown reads
+        unaligned = False
+    except KeyError:
+        unaligned = True
+    assert not unaligned, "twin should silently ignore unknown ids to match HDL"

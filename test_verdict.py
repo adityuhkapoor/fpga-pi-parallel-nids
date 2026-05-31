@@ -46,8 +46,8 @@ def test_port_scan_and_rate_anomaly_both_hit():
 
 
 def test_reserved_mask_bits_are_ignored():
-    # bits 3-7 are reserved; setting them must not invent threats.
-    v = decode_verdict(_frame(mask=0b1111_1000))
+    # bits 4-7 are reserved (bit 3 is now rule_match, v2 step 4); setting them must not invent threats.
+    v = decode_verdict(_frame(mask=0b1111_0000))
     assert v.threats == []
 
 

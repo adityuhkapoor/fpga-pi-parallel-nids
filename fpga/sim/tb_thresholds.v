@@ -6,10 +6,12 @@ module tb_thresholds;
     reg  [7:0]  w_id = 8'd0, r_id = 8'd0;
     reg  [15:0] w_val = 16'd0;
     wire [15:0] r_val, port_thresh, host_thresh, rate_thresh;
+    wire [7:0]  rule_epoch;
 
     thresholds dut (.clk(clk), .rst(rst), .w_id(w_id), .w_val(w_val), .w_en(w_en),
                     .r_id(r_id), .r_val(r_val),
-                    .port_thresh(port_thresh), .host_thresh(host_thresh), .rate_thresh(rate_thresh));
+                    .port_thresh(port_thresh), .host_thresh(host_thresh),
+                    .rate_thresh(rate_thresh), .rule_epoch(rule_epoch));
     always #5 clk = ~clk;
     integer errors = 0;
 
@@ -49,7 +51,12 @@ module tb_thresholds;
         do_read(8'h00); expect_val(16'd12, "port_unchanged");
         do_read(8'hEE); expect_val(16'd0, "unknown_zero");
 
-        if (errors == 0) $display("PASS: tb_thresholds defaults + write/read + ignore unknown");
+        // v2 step 4: id 0x03 = rule_epoch (default 0; live tap to rule_lookup)
+        expect_tap({8'd0, rule_epoch}, 16'd0, "rule_epoch_def");
+        do_write(8'h03, 16'd42); do_read(8'h03); expect_val(16'd42, "rule_epoch_42");
+        expect_tap({8'd0, rule_epoch}, 16'd42, "rule_epoch_tap_42");
+
+        if (errors == 0) $display("PASS: tb_thresholds defaults + write/read + ignore unknown + rule_epoch");
         else             $display("FAIL: %0d error(s)", errors);
         $finish;
     end

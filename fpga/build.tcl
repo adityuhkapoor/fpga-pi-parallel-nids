@@ -11,7 +11,8 @@ add_files -norecurse [list $origin/src/nids_top.v $origin/src/spi_slave_rx.v \
                            $origin/src/scan_rate.v $origin/src/classifiers.v \
                            $origin/src/verdict_encoder.v \
                            $origin/src/cms.v $origin/src/hll.v $origin/src/telemetry.v \
-                           $origin/src/rule_store.v $origin/src/thresholds.v]
+                           $origin/src/rule_store.v $origin/src/thresholds.v \
+                           $origin/src/flow_table.v $origin/src/rule_lookup.v]
 add_files -norecurse $origin/src/bloom_init.mem
 add_files -fileset constrs_1 -norecurse $origin/constraints/nids.xdc
 set_property top nids_top [current_fileset]

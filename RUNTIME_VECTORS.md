@@ -28,12 +28,9 @@ layout decoupled from any sketch behavior, so both sides verify independently:
 | `0x10` ack | `{magic=0x5A, op=0x10}` | `5a10000000000000000000000000000000000000000000000000000000000000` |
 | `0x11` ack | `{magic=0x5A, op=0x11}` | `5a11000000000000000000000000000000000000000000000000000000000000` |
 | `0x12` ack | `{magic=0x5A, op=0x12}` | `5a12000000000000000000000000000000000000000000000000000000000000` |
-| `0x13` resp | `{magic, addr_echo=0x0ABC, value=0xBEEF}` | `5a0abcbeef0000000000000000000000000000000000000000000000000000000` * |
-| `0x14` resp | `{magic, id_echo=0x02, value=0x000C}` | `5a02000c0000000000000000000000000000000000000000000000000000000000` * |
-| `0x15` resp | `{magic, idx_echo=0x002A, rule=9 bytes}` | `5a002acb007105050307000000000000000000000000000000000000000000000` * |
-
-\* Response samples truncated to highlight the data; the wire frame is always exactly 32 bytes
-with remaining bytes zero. Pin via `control.py`'s `encode_*` / `decode_*` helpers.
+| `0x13` resp | `{magic, addr_echo=0x0ABC, value=0xBEEF}` | `5a0abcbeef000000000000000000000000000000000000000000000000000000` |
+| `0x14` resp | `{magic, id_echo=0x02, value=0x000C}` | `5a02000c00000000000000000000000000000000000000000000000000000000` |
+| `0x15` resp | `{magic, idx_echo=0x002A, rule=9 bytes}` | `5a002acb00710505030700000000000000000000000000000000000000000000` |
 
 Byte 0 ≠ `0x5A` means the request didn't yield a runtime response (e.g., the frame was a
 classify or telemetry opcode); receivers must reject such frames for the runtime path.

@@ -7,8 +7,8 @@ from dataclasses import dataclass
 VERDICT_MAGIC = 0xA5
 VERDICT_LEN = 32             # v2 frame width (v1 was 20)
 
-# Stage-hit mask bits (byte 1), in wire-bit order.
-_STAGE_BITS = [("bloom", 0), ("port_scan", 1), ("rate_anomaly", 2)]
+# Stage-hit mask bits (byte 1), in wire-bit order. Bit 3 is the v2 step-4 rule match.
+_STAGE_BITS = [("bloom", 0), ("port_scan", 1), ("rate_anomaly", 2), ("rule_match", 3)]
 
 # Severity (byte 2): 0 clean / 1 low / 2 med / 3 high.
 _SEVERITY_NAMES = {0: "clean", 1: "low", 2: "med", 3: "high"}
@@ -22,6 +22,7 @@ class Verdict:
     bloom_hit: bool
     port_scan: bool
     rate_anomaly: bool
+    rule_match: bool                 # v2 step 4: a runtime rule fired for this src
     severity: int
     escalate: bool
     seq: int
@@ -30,7 +31,7 @@ class Verdict:
     def threats(self) -> list[str]:
         """Names of the stages that fired, in bit order."""
         hits = {"bloom": self.bloom_hit, "port_scan": self.port_scan,
-                "rate_anomaly": self.rate_anomaly}
+                "rate_anomaly": self.rate_anomaly, "rule_match": self.rule_match}
         return [name for name, _ in _STAGE_BITS if hits[name]]
 
     @property
@@ -50,14 +51,15 @@ class Verdict:
 
 
 def encode_verdict(*, bloom_hit: bool = False, port_scan: bool = False,
-                   rate_anomaly: bool = False, severity: int = 0,
-                   escalate: bool = False, seq: int = 0) -> bytes:
+                   rate_anomaly: bool = False, rule_match: bool = False,
+                   severity: int = 0, escalate: bool = False, seq: int = 0) -> bytes:
     """Build a 32-byte valid verdict frame (magic=0xA5). Inverse of decode_verdict.
 
     Used to generate the shared format vectors and, later, the CPU reference
     classifier's output for the FPGA-vs-CPU comparison.
     """
-    mask = (bloom_hit << 0) | (port_scan << 1) | (rate_anomaly << 2)
+    mask = ((bloom_hit << 0) | (port_scan << 1) |
+            (rate_anomaly << 2) | (rule_match << 3))
     flags = _FLAG_ESCALATE if escalate else 0
     head = bytes([VERDICT_MAGIC, mask, severity, flags, seq & 0xFF])
     return head + bytes(VERDICT_LEN - len(head))
@@ -73,6 +75,7 @@ def decode_verdict(frame: bytes) -> Verdict:
         bloom_hit=bool(mask & (1 << 0)),
         port_scan=bool(mask & (1 << 1)),
         rate_anomaly=bool(mask & (1 << 2)),
+        rule_match=bool(mask & (1 << 3)),
         severity=frame[2],
         escalate=bool(frame[3] & _FLAG_ESCALATE),
         seq=frame[4],

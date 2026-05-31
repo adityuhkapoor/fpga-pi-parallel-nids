@@ -67,24 +67,30 @@ module nids_top (
     wire [7:0]  op_b0   = rx_frame[FRAME_BITS-1  -: 8];      // byte 0
     wire [15:0] op_b1_2 = rx_frame[FRAME_BITS-9  -: 16];     // bytes 1-2
 
-    // thresholds reg-file (writes on 0x11, reads on 0x14; live taps fed to classifiers)
+    // thresholds reg-file (writes on 0x11, reads on 0x14; live taps fed to classifiers).
+    // v2 step 4: also exposes a `rule_epoch` tap (id 0x03) consumed by rule_lookup.
     wire [15:0] port_thresh, host_thresh, rate_thresh;
+    wire [7:0]  current_rule_epoch;
     wire [15:0] thr_r_val;
     thresholds u_thr (
         .clk(clk), .rst(rst),
         .w_id(op_b0), .w_val(op_b1_2), .w_en(fields_valid && (inflight_op == 8'h11)),
         .r_id(op_b0), .r_val(thr_r_val),
-        .port_thresh(port_thresh), .host_thresh(host_thresh), .rate_thresh(rate_thresh)
+        .port_thresh(port_thresh), .host_thresh(host_thresh), .rate_thresh(rate_thresh),
+        .rule_epoch(current_rule_epoch)
     );
 
-    // rule_store (writes on 0x12, reads on 0x15; step-4 reads through a separate r_idx port we
-    // multiplex into here; for step 2 the readback path is what's exercised)
+    // rule_store: r_idx is muxed between Pi readback (opcode 0x15) and the per-packet
+    // classifier rule_lookup (combinational hash of src_ip). The two never overlap because
+    // 0x15 frames don't go through classify_now.
+    wire [8:0]  classifier_rs_r_idx;
+    wire [8:0]  rs_r_idx_mux = (inflight_op == 8'h15) ? op_b0_1[8:0] : classifier_rs_r_idx;
     wire [71:0] rule_r_rule;
     rule_store u_rs (
         .clk(clk),
         .w_idx(op_b0_1[8:0]), .w_rule(op_b2_10),
         .w_en(fields_valid && (inflight_op == 8'h12)),
-        .r_idx(op_b0_1[8:0]), .r_rule(rule_r_rule)
+        .r_idx(rs_r_idx_mux), .r_rule(rule_r_rule)
     );
 
     // bloom port-B signals (the bloom is inside classifiers; we thread these through)
@@ -95,8 +101,9 @@ module nids_top (
     wire        bf_r_en   = fields_valid && (inflight_op == 8'h13);
     wire [15:0] bf_r_data;
 
-    // v1.1 classifier path (gated to 0x00); taps thresholds + bloom port-B through
-    wire [2:0] hit_mask;
+    // v1.1+v2 classifier path (gated to opcode 0x00). Now includes flow_table (step 3,
+    // replaces scan_rate) and rule_lookup (step 4, reads rule_store at src_ip's hash).
+    wire [3:0] hit_mask;
     wire [1:0] severity;
     wire       escalate, classify_valid;
     classifiers u_cls (
@@ -107,6 +114,8 @@ module nids_top (
         .port_thresh(port_thresh), .host_thresh(host_thresh), .rate_thresh(rate_thresh),
         .bf_w_addr(bf_w_addr), .bf_w_data(bf_w_data), .bf_w_en(bf_w_en),
         .bf_r_addr(bf_r_addr), .bf_r_en(bf_r_en),   .bf_r_data(bf_r_data),
+        .current_rule_epoch(current_rule_epoch),
+        .rs_r_idx(classifier_rs_r_idx), .rs_r_rule(rule_r_rule),
         .hit_mask(hit_mask), .severity(severity), .escalate(escalate), .classify_valid(classify_valid)
     );
 

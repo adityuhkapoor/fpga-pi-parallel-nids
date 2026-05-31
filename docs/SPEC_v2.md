@@ -54,7 +54,7 @@ closure** (see Constraints).
 |---|---|---|---|---|---|
 | **Count-Min sketch** | 5 × 4096 | 14b/row | 10.0 | 15 | ε=0.1% → `w=⌈e/ε⌉`=4096 cols; δ=1% → `d=⌈ln(1/δ)⌉`=5 rows; **5 independent banks** (see note) |
 | **HyperLogLog** | 2048 | 5 | 0.5 | 3 | 3% error target → `m=(1.04/err)²`=2048 (actual 2.3%) |
-| **Bloom blocklist** | 262144 | 1 | 8.0 | 6 | 16,384 IPs @ 0.1% target → `m=-n·ln(p)/(ln2)²`=2¹⁸, k=11, real FP 0.046%; **2 base hashes (Kirsch-Mitzenmacher)** |
+| **Bloom blocklist** | 262144 | 1 | 8.0 | 6 | 16,384 IPs @ 0.1% target → `m=-n·ln(p)/(ln2)²`=2¹⁸, k=11, real FP 0.046%; **2 base hashes (Kirsch-Mitzenmacher).** **DEFERRED:** built bitstream still carries v1's bloom (m=2¹⁶, k=2, 1 BRAM, FP ≈ 15.5 % @ 16k IPs). Upgrading to the v2-sized bloom is a future step; the v1 instance works for the small test C2 set used through step 2 silicon validation. See [[v2-step1-telemetry-done]] and [[v2-step2-runtime-rules-done]] memories. |
 | **Flow/connection table** | 4096 | 98 | 11.0 | 3 | 4096 concurrent flows × 98b state (below) |
 | **Runtime rule store** | 512 | 72 | 1.0 | 0 | 512 hot-loadable rules, Pi-written |
 | **TOTAL** | | | **30.5** | **27** | DSP at ~3 DSP/hash (v1-measured); move hashes to LUTs if DSP gets tight |

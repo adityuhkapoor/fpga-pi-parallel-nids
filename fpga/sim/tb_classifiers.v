@@ -8,7 +8,8 @@ module tb_classifiers;
     reg [31:0] src_ip = 32'd0, dst_ip = 32'd0;
     reg [15:0] src_port = 16'd0, dst_port = 16'd0, pkt_size = 16'd0, frame_count = 16'd0;
     reg [7:0]  proto = 8'd0, tcp_flags = 8'd0;
-    wire [2:0] hit_mask;
+    wire [3:0] hit_mask;
+    wire [8:0] rs_r_idx_unused;
     wire [1:0] severity;
     wire       escalate, classify_valid;
     integer errors = 0, i;
@@ -20,6 +21,8 @@ module tb_classifiers;
         .port_thresh(16'd5), .host_thresh(16'd5), .rate_thresh(16'd8),         // v1.1 defaults
         .bf_w_addr(12'd0), .bf_w_data(16'd0), .bf_w_en(1'b0),                  // bloom port-B idle
         .bf_r_addr(12'd0), .bf_r_en(1'b0), .bf_r_data(),
+        .current_rule_epoch(8'd0),                                             // no rule_epoch advances
+        .rs_r_idx(rs_r_idx_unused), .rs_r_rule(72'd0),                         // no rules -> rl_match=0
         .hit_mask(hit_mask), .severity(severity), .escalate(escalate),
         .classify_valid(classify_valid)
     );
@@ -37,7 +40,7 @@ module tb_classifiers;
         end
     endtask
 
-    task chk(input [2:0] em, input [1:0] es, input [31:0] id);
+    task chk(input [3:0] em, input [1:0] es, input [31:0] id);
         begin
             if (hit_mask !== em || severity !== es) begin
                 $display("FAIL: check %0d mask=%b(exp %b) sev=%0d(exp %0d)",
@@ -52,24 +55,24 @@ module tb_classifiers;
 
         // clean: no C2, one-off UDP -> no hits
         feed(32'hC0000201, 32'hC0000202, 16'd53, 8'd17, 8'h00, 16'd0);
-        chk(3'b000, 2'd0, 0);
+        chk(4'b0000, 2'd0, 0);
 
         // bloom C2 hit: dst is a C2 IP -> bit0, sev3 (single SYN won't trip scan)
         feed(32'hC0000201, 32'hC6336401, 16'd443, 8'd6, 8'h02, 16'd1);
-        chk(3'b001, 2'd3, 1);
+        chk(4'b0001, 2'd3, 1);
 
         // rate flood: 8 packets from a fresh source, frames 2..9 (all epoch 0) -> bit2 on 8th
         for (i = 0; i < 8; i = i + 1) begin
             feed(32'hC0000220, 32'hC0000221, 16'd9999, 8'd17, 8'h00, 16'd2 + i[15:0]);
-            if (i < 7)  chk(3'b000, 2'd0, 100 + i);
-            if (i == 7) chk(3'b100, 2'd2, 107);
+            if (i < 7)  chk(4'b0000, 2'd0, 100 + i);
+            if (i == 7) chk(4'b0100, 2'd2, 107);
         end
 
         // combined: a C2 source that also floods, frames 16..23 (all epoch 1) -> bits 0+2 on 8th
         for (i = 0; i < 8; i = i + 1) begin
             feed(32'hC6336401, 32'hC0000221, 16'd9999, 8'd17, 8'h00, 16'd16 + i[15:0]);
-            if (i < 7)  chk(3'b001, 2'd3, 200 + i);   // bloom only (rate building)
-            if (i == 7) chk(3'b101, 2'd3, 207);       // bloom + rate
+            if (i < 7)  chk(4'b0001, 2'd3, 200 + i);   // bloom only (rate building)
+            if (i == 7) chk(4'b0101, 2'd3, 207);       // bloom + rate
         end
 
         if (errors == 0)

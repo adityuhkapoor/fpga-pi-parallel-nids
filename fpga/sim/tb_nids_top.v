@@ -86,14 +86,23 @@ module tb_nids_top;
         256'h0ABC000000000000_0000000000000000_1300000000000000_0000000000000000;
     // 0x12 rule write idx=42: b0-1=0x002A, b2-5=src_ip=0xCB007105, b6=action=0x05,
     //                           b7=sev=0x03, b8=epoch=0x07, byte16=0x12
+    // (This idx is for the step-2 readback test; rule_lookup uses a different hash so this
+    //  rule won't fire on a classify -- that's why we have RUL_W_HIT below.)
     localparam [FRAME_BITS-1:0] RUL_W =
         256'h002ACB00710505030700000000000000_1200000000000000_0000000000000000;
     // 0x15 rule read idx=42: b0-1=0x002A, byte16=0x15
     localparam [FRAME_BITS-1:0] RUL_R =
         256'h002A000000000000_0000000000000000_1500000000000000_0000000000000000;
+    // v2 step 4 rule-hit test: write a rule at lookup_idx(0xCB007105)=0x1DD with epoch=0
+    // (default current_rule_epoch); classifying src=CB007105 must fire mask bit 3.
+    localparam [FRAME_BITS-1:0] RUL_W_HIT =
+        256'h01DDCB00710505030000000000000000_1200000000000000_0000000000000000;
+    // Classify frame for src_ip=CB007105 (dst,ports,proto,flags arbitrary -- here all zero).
+    localparam [FRAME_BITS-1:0] CLF_HIT_SRC =
+        256'hCB00710500000000_0000000000000000_0000000000000000_0000000000000000;
     localparam [FRAME_BITS-1:0] FLUSH = {FRAME_BITS{1'b0}};
 
-    reg [FRAME_BITS-1:0] r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13;
+    reg [FRAME_BITS-1:0] r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20;
 
     initial begin
         #40 btnC = 1'b0;          // release reset
@@ -151,7 +160,44 @@ module tb_nids_top;
                      r13[FRAME_BITS-1 -: 8], r13[FRAME_BITS-9 -: 16], r13[FRAME_BITS-25 -: 16]);
             errors=errors+1; end
 
-        if (errors == 0) $display("PASS: nids_top v1.1 + snapshot + step-2 threshold + bloom roundtrips");
+        // --- step-2: rule write 0x12 (idx=42, src=CB007105, action=05, sev=03, epoch=07), read back 0x15 ---
+        // (audit MED #4: RUL_W/RUL_R were declared but never sent.)
+        send_frame(RUL_W, r14);
+        send_frame(FLUSH, r15);                       // ack for RUL_W
+        send_frame(RUL_R, r16);
+        send_frame(FLUSH, r17);                       // response for RUL_R
+
+        if (r15[FRAME_BITS-1 -: 8] !== 8'h5A || r15[FRAME_BITS-9 -: 8] !== 8'h12) begin
+            $display("FAIL rul_w ack: magic=%02h op=%02h",
+                     r15[FRAME_BITS-1 -: 8], r15[FRAME_BITS-9 -: 8]); errors=errors+1; end
+        // r17 layout: byte 0 magic(5A) | bytes 1-2 idx_echo(002A) | bytes 3-11 rule(9 bytes)
+        if (r17[FRAME_BITS-1 -: 8] !== 8'h5A
+            || r17[FRAME_BITS-9 -: 16] !== 16'h002A
+            || r17[FRAME_BITS-25 -: 32] !== 32'hCB007105   // src_ip
+            || r17[FRAME_BITS-57 -: 8]  !== 8'h05          // action
+            || r17[FRAME_BITS-65 -: 8]  !== 8'h03          // severity
+            || r17[FRAME_BITS-73 -: 8]  !== 8'h07) begin   // epoch
+            $display("FAIL rul_r read-back: magic=%02h idx=%04h src=%08h act=%02h sev=%02h ep=%02h",
+                     r17[FRAME_BITS-1 -: 8], r17[FRAME_BITS-9 -: 16], r17[FRAME_BITS-25 -: 32],
+                     r17[FRAME_BITS-57 -: 8], r17[FRAME_BITS-65 -: 8], r17[FRAME_BITS-73 -: 8]);
+            errors=errors+1; end
+
+        // --- step-4: write a block-rule at lookup_idx(CB007105)=0x1DD, then classify CB007105
+        // and assert the verdict has mask bit 3 set (rule_match). ---
+        send_frame(RUL_W_HIT,    r18);   // load rule at the right idx for src=CB007105
+        send_frame(FLUSH,        r19);   // ack
+        send_frame(CLF_HIT_SRC,  r20);   // classify src=CB007105 (this read = prior ack)
+        send_frame(FLUSH,        r17);   // overwrite r17 with classify verdict (one-frame lag)
+
+        // r17 byte 1 = hit_mask; bit 3 must be set (rule_match=1).
+        if (r17[FRAME_BITS-1 -: 8] !== 8'hA5
+            || (r17[FRAME_BITS-9 -: 8] & 8'h08) === 8'h00) begin
+            $display("FAIL rule_hit: magic=%02h mask=%02h (want magic=A5, bit3 set)",
+                     r17[FRAME_BITS-1 -: 8], r17[FRAME_BITS-9 -: 8]);
+            errors = errors + 1;
+        end
+
+        if (errors == 0) $display("PASS: nids_top v1.1 + snapshot + step-2 (threshold+bloom+rule) + step-4 rule-hit");
         else             $display("FAIL: %0d error(s)", errors);
         $finish;
     end

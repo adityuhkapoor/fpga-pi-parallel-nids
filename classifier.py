@@ -23,11 +23,13 @@ def _parse(header):
 
 
 class Classifier:
-    """Stateful: feed frames in order; frame_count drives the window epoch."""
+    """Stateful: feed frames in order; frame_count drives the window epoch. The optional
+    thresholds argument (a `thresholds_model.Thresholds`) is plumbed into ScanRateTable so
+    runtime threshold writes (opcode 0x11) are reflected in CPU-twin behavior, matching HDL."""
 
-    def __init__(self, bloom: BloomFilter):
+    def __init__(self, bloom: BloomFilter, thresholds=None):
         self.bloom = bloom
-        self.table = ScanRateTable()
+        self.table = ScanRateTable(thresholds=thresholds)
 
     def classify(self, header: bytes, seq: int, frame_count: int) -> bytes:
         src_ip, dst_ip, _sp, dst_port, proto, flags, _sz = _parse(header)
