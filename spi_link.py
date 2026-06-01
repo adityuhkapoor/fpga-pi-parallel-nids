@@ -1,5 +1,7 @@
-"""SPI link to the FPGA. Pi is master on /dev/spidev0.0; see PROTOCOL.md."""
-import spidev
+"""SPI link to the FPGA. Pi is master on /dev/spidev0.0; see PROTOCOL.md.
+
+spidev is imported lazily inside SpiLink.__init__ so constants (FRAME_LEN) can be
+pulled in for off-Pi unit tests on machines without spidev installed."""
 
 # Locked SPI parameters (PROTOCOL.md).
 BUS, DEVICE = 0, 0           # /dev/spidev0.0 (SPI0, CE0)
@@ -10,6 +12,7 @@ FRAME_LEN = 32               # v2 frame width (v1 was 20)
 
 class SpiLink:
     def __init__(self, bus=BUS, device=DEVICE, speed_hz=MAX_SPEED_HZ, mode=MODE):
+        import spidev                   # Pi-only; importing eagerly would break off-Pi tests
         self.spi = spidev.SpiDev()
         self.spi.open(bus, device)
         self.spi.max_speed_hz = speed_hz

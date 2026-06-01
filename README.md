@@ -52,10 +52,14 @@ logic on the Pi CPU runs ~3.4 us with large per-packet jitter.
 
 `viz.py` shows the live classification stream — green clean, red threat — with a running summary. Run it on the Pi against the flashed board (`sudo python3 viz.py --iface eth0`), or anywhere with no hardware (`python3 viz.py --replay`).
 
+### v2 closed-loop demo (capstone)
+
+`run_demo.py` runs the full v2 observe→decide→act loop on the Pi 4B against the flashed FPGA — synthetic adversary scenarios (benign / C2 / port scan / flood), live snapshot polling, runtime rule pushes when a top talker emerges, and a curses dashboard. See [`docs/STEP5_DEMO.md`](docs/STEP5_DEMO.md) for the full walkthrough and silicon-verified logs in [`docs/demo_logs/`](docs/demo_logs/).
+
 ## Hardware
-- Raspberry Pi 5. Python, with scapy for capture and spidev for SPI.
+- Raspberry Pi 4B. Python, with scapy for capture and spidev for SPI.
 - Basys 3 board, Xilinx Artix-7 (xc7a35t). Verilog, built with Vivado 2023.2.
-- Link: SPI mode 0, 1 MHz, 20-byte frames. Four signal wires plus ground. The Pi is master.
+- Link: SPI mode 0, 8 MHz, 32-byte frames (v2). v1 ran at 1 MHz / 20-byte. Four signal wires plus ground; the Pi is master.
 
 ## Implementation (Artix-7 xc7a35t, Vivado 2023.2)
 
